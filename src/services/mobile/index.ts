@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import express, { Request, Response, NextFunction } from 'express';
+import cookieParser from 'cookie-parser';
 import * as WebSocket from 'ws';
 import * as http from 'http';
 import { AddressInfo } from 'net';
@@ -9,6 +10,7 @@ import * as fs from 'fs';
 import * as ngrok from 'ngrok';
 import * as QRCode from 'qrcode';
 import { v4 as uuidv4 } from 'uuid';
+import { randomBytes } from 'crypto';
 import { debugLog } from '../../utils/logging';
 import { 
     messageQueue, 
@@ -42,6 +44,7 @@ export class MobileServer {
     private webPassword = '';
     private passwordAttempts = new Map<string, number>();
     private blockedIPs = new Set<string>();
+    private activeSessions = new Set<string>();
 
     constructor() {
         this.app = express();
@@ -73,6 +76,7 @@ export class MobileServer {
 
     private setupMiddleware(): void {
         this.app.use(express.json());
+        this.app.use(cookieParser());
         
         // DO NOT USE express.static - it bypasses authentication!
         // Static files will be served individually with authentication
@@ -101,15 +105,15 @@ export class MobileServer {
             return;
         }
 
-        // Skip auth for main route, password route, and login endpoint
-        if (req.path === '/' || req.path === '/password' || req.path === '/api/auth/login' || req.path === '/login.html') {
+        // Skip auth for login endpoint (path is relative to /api mount point)
+        if (req.path === '/auth/login') {
             return next();
         }
 
-        // Check password in query, body, or headers
-        const password = req.query.password || req.body?.password || req.headers['x-web-password'];
+        // Check for session token in headers or cookies
+        const sessionToken = req.headers['x-session-token'] as string || (req as any).cookies?.sessionToken;
         
-        if (!password || password !== this.webPassword) {
+        if (!sessionToken || !this.activeSessions.has(sessionToken)) {
             const attempts = this.passwordAttempts.get(clientIP) || 0;
             this.passwordAttempts.set(clientIP, attempts + 1);
             
@@ -128,7 +132,7 @@ export class MobileServer {
             }
             
             res.status(401).json({ 
-                error: 'Password required', 
+                error: 'Session expired. Please login again.', 
                 attemptsLeft: 5 - (attempts + 1) 
             });
             return;
@@ -140,12 +144,12 @@ export class MobileServer {
     }
 
     private checkPasswordForStaticFiles(req: Request, res: Response): boolean {
-        // If external server with password is enabled, check password
+        // If external server with password is enabled, check session
         if (this.useExternalServer && this.webPassword) {
-            const password = req.query.password || req.body?.password || req.headers['x-web-password'];
+            const sessionToken = req.headers['x-session-token'] as string || (req as any).cookies?.sessionToken;
             const clientIP = req.ip || req.connection.remoteAddress || 'unknown';
             
-            if (!password || password !== this.webPassword) {
+            if (!sessionToken || !this.activeSessions.has(sessionToken)) {
                 // Check if IP is blocked
                 if (this.blockedIPs.has(clientIP)) {
                     res.status(403).json({ error: 'IP blocked due to too many failed attempts' });
@@ -170,7 +174,7 @@ export class MobileServer {
                 }
                 
                 res.status(401).json({ 
-                    error: 'Password required', 
+                    error: 'Session expired. Please login again.', 
                     attemptsLeft: 5 - (attempts + 1) 
                 });
                 return false;
@@ -192,10 +196,10 @@ export class MobileServer {
                 return res.status(401).json({ error: 'Unauthorized: Invalid or missing authentication token' });
             }
             
-            // Check if password is required and not provided
+            // Check if password is required and session is not authenticated
             if (this.useExternalServer && this.webPassword) {
-                const password = req.query.password;
-                if (!password || password !== this.webPassword) {
+                const sessionToken = req.headers['x-session-token'] as string || (req as any).cookies?.sessionToken;
+                if (!sessionToken || !this.activeSessions.has(sessionToken)) {
                     return res.redirect(`/password?token=${this.authToken}`);
                 }
             }
@@ -273,8 +277,22 @@ export class MobileServer {
                 return; // Response already sent by checkPasswordForStaticFiles
             }
             
+            const filePath = path.join(__dirname, '../../webview/mobile/styles.css');
+            
+            if (!fs.existsSync(filePath)) {
+                console.error('styles.css not found at expected path:', filePath);
+                return res.status(404).send('styles.css not found');
+            }
+            
             res.setHeader('Content-Type', 'text/css');
-            res.sendFile(path.join(__dirname, '../../webview/mobile/styles.css'));
+            
+            try {
+                const cssContent = fs.readFileSync(filePath, 'utf8');
+                res.send(cssContent);
+            } catch (error) {
+                console.error('Error reading styles.css:', error);
+                res.status(500).send('Error loading stylesheet');
+            }
         });
 
         this.app.get('/script.js', (req: Request, res: Response) => {
@@ -288,8 +306,22 @@ export class MobileServer {
                 return; // Response already sent by checkPasswordForStaticFiles
             }
             
+            const filePath = path.join(__dirname, '../../webview/mobile/script.js');
+            
+            if (!fs.existsSync(filePath)) {
+                console.error('script.js not found at expected path:', filePath);
+                return res.status(404).send('script.js not found');
+            }
+            
             res.setHeader('Content-Type', 'application/javascript');
-            res.sendFile(path.join(__dirname, '../../webview/mobile/script.js'));
+            
+            try {
+                const jsContent = fs.readFileSync(filePath, 'utf8');
+                res.send(jsContent);
+            } catch (error) {
+                console.error('Error reading script.js:', error);
+                res.status(500).send('Error loading script');
+            }
         });
 
         // API Routes
@@ -443,7 +475,19 @@ export class MobileServer {
             
             if (!this.webPassword || password === this.webPassword) {
                 this.passwordAttempts.delete(clientIP);
-                res.json({ success: true, token: this.authToken });
+                
+                // Create session token
+                const sessionToken = randomBytes(32).toString('hex');
+                this.activeSessions.add(sessionToken);
+                
+                // Set session cookie and return success
+                res.cookie('sessionToken', sessionToken, { 
+                    httpOnly: true, 
+                    secure: this.useExternalServer, // HTTPS in production
+                    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+                });
+                
+                res.json({ success: true, sessionToken });
             } else {
                 const attempts = this.passwordAttempts.get(clientIP) || 0;
                 this.passwordAttempts.set(clientIP, attempts + 1);
