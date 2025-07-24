@@ -15,7 +15,7 @@ export let healthCheckTimer: NodeJS.Timeout | null = null;
 export let sessionReady = false;
 export let currentMessage: MessageItem | null = null;
 export let processingQueue = false;
-export let debugMode = false;
+export let debugMode = process.env.DEBUG_MODE === 'true';
 
 export let currentRun: HistoryRun | null = null;
 export let extensionContext: vscode.ExtensionContext;
@@ -33,10 +33,12 @@ export function setClaudePanel(panel: vscode.WebviewPanel | null) {
 
 export function setIsRunning(running: boolean) {
     isRunning = running;
+    notifyMobileStatusUpdate();
 }
 
 export function setMessageQueue(queue: MessageItem[]) {
     messageQueue = queue;
+    notifyMobileQueueUpdate();
 }
 
 export function setClaudeProcess(process: ChildProcess | null) {
@@ -45,6 +47,7 @@ export function setClaudeProcess(process: ChildProcess | null) {
 
 export function setSessionReady(ready: boolean) {
     sessionReady = ready;
+    notifyMobileStatusUpdate();
 }
 
 export function setCurrentMessage(message: MessageItem | null) {
@@ -53,6 +56,7 @@ export function setCurrentMessage(message: MessageItem | null) {
 
 export function setProcessingQueue(processing: boolean) {
     processingQueue = processing;
+    notifyMobileStatusUpdate();
 }
 
 export function setCurrentRun(run: HistoryRun | null) {
@@ -108,4 +112,32 @@ export function setQueueSortConfig(config: QueueSortConfig) {
 }
 export function setDebugMode(debug: boolean) {
     debugMode = debug;
+}
+
+// Helper function to notify mobile clients of status updates
+function notifyMobileStatusUpdate(): void {
+    try {
+        // Import here to avoid circular dependency
+        const { getMobileServer } = require('../services/mobile');
+        const mobileServer = getMobileServer();
+        if (mobileServer.isRunning()) {
+            mobileServer.notifyStatusUpdate();
+        }
+    } catch (error) {
+        // Silently fail if mobile service isn't available
+    }
+}
+
+// Helper function to notify mobile clients of queue updates
+function notifyMobileQueueUpdate(): void {
+    try {
+        // Import here to avoid circular dependency
+        const { getMobileServer } = require('../services/mobile');
+        const mobileServer = getMobileServer();
+        if (mobileServer.isRunning()) {
+            mobileServer.notifyQueueUpdate();
+        }
+    } catch (error) {
+        // Silently fail if mobile service isn't available
+    }
 }

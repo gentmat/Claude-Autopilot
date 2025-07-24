@@ -2,7 +2,7 @@
   "name": "claude-autopilot",
   "displayName": "Claude Autopilot",
   "description": "Automated Claude Code task management with queue processing and auto-resume functionality",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "icon": "icon.png",
   "engines": {
     "vscode": "^1.74.0"
@@ -12,6 +12,9 @@
     "Other"
   ],
   "main": "./out/extension.js",
+  "activationEvents": [
+    "*"
+  ],
   "contributes": {
     "commands": [
       {
@@ -28,6 +31,21 @@
         "command": "claude-autopilot.addMessage",
         "title": "Add Message to Queue",
         "category": "Claude"
+      },
+      {
+        "command": "claude-autopilot.startWebInterface",
+        "title": "Start Web Interface",
+        "category": "Claude"
+      },
+      {
+        "command": "claude-autopilot.stopWebInterface",
+        "title": "Stop Web Interface",
+        "category": "Claude"
+      },
+      {
+        "command": "claude-autopilot.showWebInterfaceQR",
+        "title": "Show Web Interface QR Code",
+        "category": "Claude"
       }
     ],
     "menus": {
@@ -42,6 +60,18 @@
         },
         {
           "command": "claude-autopilot.addMessage",
+          "when": "true"
+        },
+        {
+          "command": "claude-autopilot.startWebInterface",
+          "when": "true"
+        },
+        {
+          "command": "claude-autopilot.stopWebInterface",
+          "when": "true"
+        },
+        {
+          "command": "claude-autopilot.showWebInterfaceQR",
           "when": "true"
         }
       ]
@@ -105,7 +135,12 @@
         },
         "claudeAutopilot.sleepPrevention.method": {
           "type": "string",
-          "enum": ["auto", "caffeinate", "powershell", "systemd-inhibit"],
+          "enum": [
+            "auto",
+            "caffeinate",
+            "powershell",
+            "systemd-inhibit"
+          ],
           "default": "auto",
           "description": "Method to use for sleep prevention"
         },
@@ -135,21 +170,36 @@
           "type": "boolean",
           "default": false,
           "description": "⚠️ DANGER: Allow bypassing XSS protection in webview content. Only enable if you trust all message content and understand the security risks."
+        },
+        "claudeAutopilot.webInterface.useExternalServer": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use external server (ngrok) for web interface. If disabled, uses local network only."
+        },
+        "claudeAutopilot.webInterface.password": {
+          "type": "string",
+          "default": "",
+          "description": "Password for web interface access when using external server. Leave empty for no password protection."
         }
       }
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run compile && npm run copy-deps",
     "compile": "tsc -p ./ && cp src/claude_pty_wrapper.py out/claude/session/ && cp -r src/webview out/",
+    "copy-deps": "mkdir -p out/node_modules && cp -r node_modules/* out/node_modules/ 2>/dev/null || true",
     "watch": "tsc -watch -p ./",
     "package": "vsce package",
     "publish": "vsce publish",
     "prepackage": "npm run compile"
   },
   "devDependencies": {
+    "@types/express": "^5.0.3",
     "@types/node": "16.x",
+    "@types/qrcode": "^1.5.5",
+    "@types/uuid": "^10.0.0",
     "@types/vscode": "^1.74.0",
+    "@types/ws": "^8.18.1",
     "typescript": "^4.9.4"
   },
   "keywords": [
@@ -180,5 +230,12 @@
   "galleryBanner": {
     "color": "#1e1e1e",
     "theme": "dark"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "ngrok": "^5.0.0-beta.2",
+    "qrcode": "^1.5.4",
+    "uuid": "^11.1.0",
+    "ws": "^8.18.3"
   }
 }

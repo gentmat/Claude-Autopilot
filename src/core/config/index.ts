@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { debugLog } from '../../utils/logging';
+import { debugMode } from '../state';
 
 export interface ClaudeAutopilotConfig {
     // Development settings
@@ -314,7 +315,9 @@ export function showConfigValidationStatus(): void {
     const errors = validateConfig(config);
     
     if (errors.length === 0) {
-        vscode.window.showInformationMessage('✅ Claude Autopilot configuration is valid');
+        if (debugMode) {
+            vscode.window.showInformationMessage('✅ Claude Autopilot configuration is valid');
+        }
     } else {
         const errorSummary = `${errors.length} configuration error(s) found:\n` +
                            errors.map(e => `• ${e.path}: ${e.message}`).join('\n');

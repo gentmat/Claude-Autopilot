@@ -863,6 +863,9 @@ window.addEventListener('message', event => {
         case 'setDevelopmentModeSetting':
             updateDevelopmentModeUI(message.enabled);
             break;
+        case 'webServerStatusUpdate':
+            updateWebServerStatus(message.status);
+            break;
         case 'clearClaudeOutput':
             clearClaudeOutputUI();
             break;
@@ -998,7 +1001,8 @@ function parseAnsiToHtml(text) {
     text = text.replace(/\x1b\[\?25[lh]/g, ''); // Show/hide cursor
     text = text.replace(/\x1b\[\?2004[lh]/g, ''); // Bracketed paste mode
     text = text.replace(/\x1b\[\?1004[lh]/g, ''); // Focus reporting
-    text = text.replace(/\x1b\[[2-3]J/g, ''); // §
+    // Don't remove clear screen codes - let performClaudeRender detect them
+    // text = text.replace(/\x1b\[[2-3]J/g, ''); // Clear screen codes
     text = text.replace(/\x1b\[H/g, ''); // Move cursor to home
 
     // Process the text line by line to handle carriage returns properly
@@ -1196,8 +1200,9 @@ function performClaudeRender(output) {
             lastParsedContent = '';
             lastParsedHtml = '';
             
-            // Parse and render the new content
-            const htmlOutput = parseAnsiToHtml(claudeContent);
+            // Parse and render the new content (remove clear screen codes after detection)
+            const contentToRender = claudeContent.replace(/\x1b\[[2-3]J/g, '').replace(/\x1b\[H/g, '');
+            const htmlOutput = parseAnsiToHtml(contentToRender);
             lastParsedContent = output;
             lastParsedHtml = htmlOutput;
             
@@ -1877,4 +1882,114 @@ function updateDevelopmentModeUI(enabled) {
         terminalSection.style.display = enabled ? 'block' : 'none';
     }
 }
+
+// Web Interface Management
+let webServerStatus = {
+    running: false,
+    url: '',
+    isExternal: false,
+    hasPassword: false,
+    blockedIPs: 0
+};
+
+function startWebInterface() {
+    vscode.postMessage({
+        command: 'startWebInterface'
+    });
+}
+
+function stopWebInterface() {
+    vscode.postMessage({
+        command: 'stopWebInterface'
+    });
+}
+
+function showWebInterfaceQR() {
+    vscode.postMessage({
+        command: 'showWebInterfaceQR'
+    });
+}
+
+function openWebInterface() {
+    vscode.postMessage({
+        command: 'openWebInterface'
+    });
+}
+
+function updateWebServerStatus(status) {
+    webServerStatus = status;
+    
+    const statusIndicator = document.getElementById('webStatusIndicator');
+    const statusText = document.getElementById('webStatusText');
+    const serverDetails = document.getElementById('webServerDetails');
+    const serverUrl = document.getElementById('webServerUrl');
+    const serverType = document.getElementById('webServerType');
+    const serverSecurity = document.getElementById('webServerSecurity');
+    
+    const startBtn = document.getElementById('startWebBtn');
+    const stopBtn = document.getElementById('stopWebBtn');
+    const showQRBtn = document.getElementById('showQRBtn');
+    const openWebBtn = document.getElementById('openWebBtn');
+    
+    if (status.running) {
+        // Update status indicator
+        if (statusIndicator) {
+            statusIndicator.innerHTML = '<div class="pulse-dot-success"></div><span id="webStatusText">Web server is running</span>';
+        }
+        
+        // Show server details
+        if (serverDetails) {
+            serverDetails.style.display = 'block';
+        }
+        if (serverUrl) {
+            serverUrl.textContent = status.url || 'Unknown';
+        }
+        if (serverType) {
+            serverType.textContent = status.isExternal ? 'External (ngrok)' : 'Local network';
+        }
+        if (serverSecurity) {
+            let securityText = status.hasPassword ? 'Password protected' : 'No password';
+            if (status.blockedIPs > 0) {
+                securityText += ` (${status.blockedIPs} blocked IPs)`;
+            }
+            serverSecurity.textContent = securityText;
+        }
+        
+        // Update buttons
+        if (startBtn) startBtn.disabled = true;
+        if (stopBtn) stopBtn.disabled = false;
+        if (showQRBtn) showQRBtn.disabled = false;
+        if (openWebBtn) openWebBtn.disabled = false;
+    } else {
+        // Update status indicator
+        if (statusIndicator) {
+            statusIndicator.innerHTML = '<div class="pulse-dot-grey"></div><span id="webStatusText">Web server is stopped</span>';
+        }
+        
+        // Hide server details
+        if (serverDetails) {
+            serverDetails.style.display = 'none';
+        }
+        
+        // Update buttons
+        if (startBtn) startBtn.disabled = false;
+        if (stopBtn) stopBtn.disabled = true;
+        if (showQRBtn) showQRBtn.disabled = true;
+        if (openWebBtn) openWebBtn.disabled = true;
+    }
+}
+
+// Request initial web server status on load
+document.addEventListener('DOMContentLoaded', function() {
+    vscode.postMessage({
+        command: 'getWebServerStatus'
+    });
+    
+    // Periodically check web server status to keep buttons in sync
+    setInterval(() => {
+        vscode.postMessage({
+            command: 'getWebServerStatus'
+        });
+    }, 5000); // Check every 5 seconds
+});
 

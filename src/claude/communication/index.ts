@@ -6,6 +6,7 @@ import { updateWebviewContent, updateSessionState } from '../../ui/webview';
 import { saveWorkspaceHistory, ensureHistoryRun, updateMessageStatusInHistory } from '../../queue/processor/history';
 import { TIMEOUT_MS, ANSI_CLEAR_SCREEN_PATTERNS } from '../../core/constants';
 import { startClaudeSession } from '../../claude/session';
+import { getMobileServer } from '../../services/mobile';
 
 export async function processNextMessage(): Promise<void> {
     debugLog('--- PROCESSING NEXT MESSAGE ---');
@@ -55,6 +56,16 @@ export async function processNextMessage(): Promise<void> {
     setCurrentMessage(message);
     updateWebviewContent();
     saveWorkspaceHistory();
+    
+    // Notify mobile clients of queue update
+    try {
+        const mobileServer = getMobileServer();
+        if (mobileServer.isRunning()) {
+            mobileServer.notifyQueueUpdate();
+        }
+    } catch (error) {
+        // Silently fail if mobile service isn't available
+    }
 
     try {
         debugLog('⏰ Claude is ready, sending message...');
@@ -72,6 +83,16 @@ export async function processNextMessage(): Promise<void> {
         updateWebviewContent();
         saveWorkspaceHistory();
         
+        // Notify mobile clients of queue update
+        try {
+            const mobileServer = getMobileServer();
+            if (mobileServer.isRunning()) {
+                mobileServer.notifyQueueUpdate();
+            }
+        } catch (error) {
+            // Silently fail if mobile service isn't available
+        }
+        
         setTimeout(() => {
             debugLog('Processing next message after delay...');
             processNextMessage();
@@ -87,6 +108,16 @@ export async function processNextMessage(): Promise<void> {
         updateMessageStatusInHistory(message.id, 'error', undefined, message.error);
         updateWebviewContent();
         saveWorkspaceHistory();
+        
+        // Notify mobile clients of queue update
+        try {
+            const mobileServer = getMobileServer();
+            if (mobileServer.isRunning()) {
+                mobileServer.notifyQueueUpdate();
+            }
+        } catch (error) {
+            // Silently fail if mobile service isn't available
+        }
         
         setTimeout(() => {
             processNextMessage();

@@ -58,6 +58,48 @@
             </div>
         </div>
 
+        <div class="web-interface-section">
+            <div class="section-header">
+                <h3>🌐 Web Interface</h3>
+            </div>
+            <div class="web-interface-status" id="webInterfaceStatus">
+                <div class="status-indicator" id="webStatusIndicator">
+                    <div class="pulse-dot-grey"></div>
+                    <span id="webStatusText">Web server is stopped</span>
+                </div>
+                <div class="web-server-details" id="webServerDetails" style="display: none;">
+                    <div class="server-info">
+                        <div class="info-item">
+                            <span class="info-label">URL:</span>
+                            <span class="info-value" id="webServerUrl">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Type:</span>
+                            <span class="info-value" id="webServerType">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Security:</span>
+                            <span class="info-value" id="webServerSecurity">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="web-interface-controls">
+                <button id="startWebBtn" onclick="startWebInterface()" class="btn-success btn-small">
+                    <span class="btn-icon">🚀</span>Start Web Server
+                </button>
+                <button id="stopWebBtn" onclick="stopWebInterface()" class="btn-danger btn-small" disabled>
+                    <span class="btn-icon">⏹️</span>Stop Web Server
+                </button>
+                <button id="showQRBtn" onclick="showWebInterfaceQR()" class="btn-secondary btn-small" disabled>
+                    <span class="btn-icon">📱</span>Show QR Code
+                </button>
+                <button id="openWebBtn" onclick="openWebInterface()" class="btn-secondary btn-small" disabled>
+                    <span class="btn-icon">🔗</span>Open in Browser
+                </button>
+            </div>
+        </div>
+
         <div id="securityWarning"
             style="display: none; background: #ff6b6b22; border: 1px solid #ff6b6b; border-radius: 4px; padding: 8px; margin-bottom: 15px; color: #ff6b6b; font-size: 13px;">
             ⚠️ XSS bypass is enabled - potentially dangerous content allowed in messages
