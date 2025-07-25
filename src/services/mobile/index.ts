@@ -561,6 +561,233 @@ export class MobileServer {
             }
         });
 
+        // Git API Endpoints
+        this.app.get('/api/git/status', async (req: Request, res: Response) => {
+            try {
+                const { getGitStatus } = await import('../git');
+                const status = await getGitStatus();
+                res.json(status);
+            } catch (error) {
+                console.error('Error getting git status:', error);
+                const message = error instanceof Error ? error.message : 'Failed to get git status';
+                res.status(500).json({ error: message });
+            }
+        });
+
+        this.app.get('/api/git/branch-info', async (req: Request, res: Response) => {
+            try {
+                const { getGitStatus } = await import('../git');
+                const status = await getGitStatus();
+                res.json(status.branch);
+            } catch (error) {
+                console.error('Error getting branch info:', error);
+                const message = error instanceof Error ? error.message : 'Failed to get branch info';
+                res.status(500).json({ error: message });
+            }
+        });
+
+        this.app.get('/api/git/file-diff/:filePath(*)', async (req: Request, res: Response) => {
+            try {
+                const filePath = req.params.filePath;
+                const compareMode = req.query.compare as 'working' | 'staged' | 'head' | 'main' || 'working';
+                
+                if (!filePath) {
+                    return res.status(400).json({ error: 'File path is required' });
+                }
+
+                const { getFileDiff } = await import('../git');
+                const diff = await getFileDiff(filePath, compareMode);
+                res.json(diff);
+            } catch (error) {
+                console.error('Error getting file diff:', error);
+                const message = error instanceof Error ? error.message : 'Failed to get file diff';
+                res.status(500).json({ error: message });
+            }
+        });
+
+        this.app.get('/api/git/expand-context/:filePath(*)', async (req: Request, res: Response) => {
+            try {
+                const filePath = req.params.filePath;
+                const startLine = parseInt(req.query.startLine as string) || 0;
+                const numLines = Math.min(parseInt(req.query.numLines as string) || 10, 50); // Max 50 lines
+                const compareMode = req.query.compare as 'working' | 'staged' | 'head' | 'main' || 'working';
+                
+                if (!filePath) {
+                    return res.status(400).json({ error: 'File path is required' });
+                }
+
+                const { expandContext } = await import('../git');
+                const contextLines = await expandContext(filePath, startLine, numLines, compareMode);
+                res.json({ lines: contextLines });
+            } catch (error) {
+                console.error('Error expanding context:', error);
+                const message = error instanceof Error ? error.message : 'Failed to expand context';
+                res.status(500).json({ error: message });
+            }
+        });
+
+        // Git Operations API Endpoints
+        this.app.post('/api/git/stage', async (req: Request, res: Response) => {
+            try {
+                const { filePath, filePaths } = req.body;
+                
+                if (filePaths && Array.isArray(filePaths)) {
+                    // Batch operation
+                    const { stageFiles } = await import('../git');
+                    const result = await stageFiles(filePaths);
+                    res.json(result);
+                } else if (filePath) {
+                    // Single file operation
+                    const { stageFile } = await import('../git');
+                    const result = await stageFile(filePath);
+                    res.json(result);
+                } else {
+                    res.status(400).json({ success: false, message: 'No files specified' });
+                }
+            } catch (error) {
+                console.error('Error staging files:', error);
+                const message = error instanceof Error ? error.message : 'Failed to stage files';
+                res.status(500).json({ success: false, message, error: message });
+            }
+        });
+
+        this.app.post('/api/git/unstage', async (req: Request, res: Response) => {
+            try {
+                const { filePath, filePaths } = req.body;
+                
+                if (filePaths && Array.isArray(filePaths)) {
+                    // Batch operation
+                    const { unstageFiles } = await import('../git');
+                    const result = await unstageFiles(filePaths);
+                    res.json(result);
+                } else if (filePath) {
+                    // Single file operation
+                    const { unstageFile } = await import('../git');
+                    const result = await unstageFile(filePath);
+                    res.json(result);
+                } else {
+                    res.status(400).json({ success: false, message: 'No files specified' });
+                }
+            } catch (error) {
+                console.error('Error unstaging files:', error);
+                const message = error instanceof Error ? error.message : 'Failed to unstage files';
+                res.status(500).json({ success: false, message, error: message });
+            }
+        });
+
+        this.app.post('/api/git/discard', async (req: Request, res: Response) => {
+            try {
+                const { filePath } = req.body;
+                
+                if (!filePath) {
+                    return res.status(400).json({ success: false, message: 'File path is required' });
+                }
+
+                const { discardChanges } = await import('../git');
+                const result = await discardChanges(filePath);
+                res.json(result);
+            } catch (error) {
+                console.error('Error discarding changes:', error);
+                const message = error instanceof Error ? error.message : 'Failed to discard changes';
+                res.status(500).json({ success: false, message, error: message });
+            }
+        });
+
+        this.app.post('/api/git/stage-all', async (req: Request, res: Response) => {
+            try {
+                const { stageAllFiles } = await import('../git');
+                const result = await stageAllFiles();
+                res.json(result);
+            } catch (error) {
+                console.error('Error staging all files:', error);
+                const message = error instanceof Error ? error.message : 'Failed to stage all files';
+                res.status(500).json({ success: false, message, error: message });
+            }
+        });
+
+        this.app.post('/api/git/unstage-all', async (req: Request, res: Response) => {
+            try {
+                const { unstageAllFiles } = await import('../git');
+                const result = await unstageAllFiles();
+                res.json(result);
+            } catch (error) {
+                console.error('Error unstaging all files:', error);
+                const message = error instanceof Error ? error.message : 'Failed to unstage all files';
+                res.status(500).json({ success: false, message, error: message });
+            }
+        });
+
+        this.app.post('/api/git/discard-all', async (req: Request, res: Response) => {
+            try {
+                const { discardAllChanges } = await import('../git');
+                const result = await discardAllChanges();
+                res.json(result);
+            } catch (error) {
+                console.error('Error discarding all changes:', error);
+                const message = error instanceof Error ? error.message : 'Failed to discard all changes';
+                res.status(500).json({ success: false, message, error: message });
+            }
+        });
+
+        // Content search endpoint for git files
+        this.app.get('/api/git/search-content', async (req: Request, res: Response) => {
+            try {
+                const { q: query } = req.query;
+                
+                if (!query || typeof query !== 'string') {
+                    return res.status(400).json({ 
+                        success: false, 
+                        message: 'Query parameter is required' 
+                    });
+                }
+                
+                // Get current git status to know which files to search
+                const { getGitStatus } = await import('../git');
+                const { resolveAndValidatePath } = await import('../git/security');
+                const fs = await import('fs/promises');
+                const path = await import('path');
+                const gitStatus = await getGitStatus();
+                const results = [];
+                
+                // Search content in changed files
+                for (const file of gitStatus.files) {
+                    try {
+                        const workspaceRoot = process.cwd();
+                        const filePath = resolveAndValidatePath(file.path, workspaceRoot);
+                        const content = await fs.readFile(filePath, 'utf-8');
+                        const lines = content.split('\n');
+                        
+                        let matchCount = 0;
+                        const regex = new RegExp(query, 'gi');
+                        
+                        for (const line of lines) {
+                            const matches = line.match(regex);
+                            if (matches) {
+                                matchCount += matches.length;
+                            }
+                        }
+                        
+                        if (matchCount > 0) {
+                            results.push({
+                                path: file.path,
+                                matches: matchCount
+                            });
+                        }
+                    } catch (fileError) {
+                        // Skip files that cannot be read
+                        continue;
+                    }
+                }
+                
+                res.json(results);
+                
+            } catch (error) {
+                console.error('Error searching content:', error);
+                const message = error instanceof Error ? error.message : 'Failed to search file content';
+                res.status(500).json({ success: false, message, error: message });
+            }
+        });
+
         // Login endpoint for password authentication
         this.app.post('/api/auth/login', (req: Request, res: Response) => {
             // Validate token first (since it's excluded from the main middleware)

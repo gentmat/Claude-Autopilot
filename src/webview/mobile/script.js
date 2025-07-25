@@ -1763,8 +1763,1645 @@ class FileExplorer {
     }
 }
 
+class GitChanges {
+    constructor() {
+        this.isExpanded = false;
+        this.currentBranch = null;
+        this.gitFiles = [];
+        this.filteredFiles = [];
+        this.refreshInterval = null;
+        this.pendingAction = null;
+        this.selectedFiles = new Set();
+        this.searchVisible = false;
+        this.currentSearch = '';
+        this.currentFilter = 'all';
+        this.init();
+    }
+
+    init() {
+        this.setupEventListeners();
+        this.loadGitStatus();
+        
+        // Auto-refresh every 30 seconds
+        this.refreshInterval = setInterval(() => {
+            if (this.isExpanded) {
+                this.loadGitStatus();
+            }
+        }, 30000);
+    }
+
+    setupEventListeners() {
+        // Toggle git section
+        const gitToggle = document.getElementById('git-toggle');
+        if (gitToggle) {
+            gitToggle.addEventListener('click', () => this.toggleSection());
+        }
+
+        // Refresh git status
+        const refreshGit = document.getElementById('refresh-git');
+        if (refreshGit) {
+            refreshGit.addEventListener('click', () => this.loadGitStatus());
+        }
+
+        // Branch info button
+        const branchInfo = document.getElementById('git-branch-info');
+        if (branchInfo) {
+            branchInfo.addEventListener('click', () => this.showBranchInfo());
+        }
+
+        // Diff viewer modal
+        const diffModal = document.getElementById('diff-viewer-modal');
+        const closeDiff = document.getElementById('close-diff');
+        if (closeDiff) {
+            closeDiff.addEventListener('click', () => this.closeDiffViewer());
+        }
+
+        // Compare mode change
+        const compareMode = document.getElementById('diff-compare-mode');
+        if (compareMode) {
+            compareMode.addEventListener('change', (e) => {
+                this.loadFileDiff(this.currentDiffFile, e.target.value);
+            });
+        }
+
+        // Copy diff
+        const copyDiff = document.getElementById('copy-diff');
+        if (copyDiff) {
+            copyDiff.addEventListener('click', () => this.copyDiff());
+        }
+
+        // Git operations
+        const stageAllBtn = document.getElementById('stage-all-btn');
+        if (stageAllBtn) {
+            stageAllBtn.addEventListener('click', () => this.confirmAction('stage-all'));
+        }
+
+        const unstageAllBtn = document.getElementById('unstage-all-btn');
+        if (unstageAllBtn) {
+            unstageAllBtn.addEventListener('click', () => this.confirmAction('unstage-all'));
+        }
+
+        // Help button
+        const helpBtn = document.getElementById('git-help-btn');
+        if (helpBtn) {
+            helpBtn.addEventListener('click', () => this.showKeyboardHelp());
+        }
+
+        // Performance button
+        const performanceBtn = document.getElementById('git-performance-btn');
+        if (performanceBtn) {
+            performanceBtn.addEventListener('click', () => this.togglePerformanceDashboard());
+        }
+
+        // Confirmation modal
+        const confirmModal = document.getElementById('git-confirm-modal');
+        const closeConfirm = document.getElementById('close-git-confirm');
+        const cancelAction = document.getElementById('cancel-git-action');
+        const confirmAction = document.getElementById('confirm-git-action');
+
+        if (closeConfirm) {
+            closeConfirm.addEventListener('click', () => this.closeConfirmModal());
+        }
+
+        if (cancelAction) {
+            cancelAction.addEventListener('click', () => this.closeConfirmModal());
+        }
+
+        if (confirmAction) {
+            confirmAction.addEventListener('click', () => this.executeAction());
+        }
+
+        // Search functionality
+        const searchToggle = document.getElementById('git-search-toggle');
+        if (searchToggle) {
+            searchToggle.addEventListener('click', () => this.toggleSearch());
+        }
+
+        const searchInput = document.getElementById('git-search-input');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => this.handleSearch(e.target.value));
+            searchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    this.clearSearch();
+                }
+            });
+        }
+
+        const searchClear = document.getElementById('git-search-clear');
+        if (searchClear) {
+            searchClear.addEventListener('click', () => this.clearSearch());
+        }
+
+        // Filter buttons
+        const filterButtons = document.querySelectorAll('.filter-btn');
+        filterButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const status = e.target.getAttribute('data-status');
+                this.setFilter(status);
+            });
+        });
+
+        // Set default active filter
+        const allFilter = document.getElementById('filter-all');
+        if (allFilter) {
+            allFilter.classList.add('active');
+        }
+
+        // Global keyboard shortcuts
+        document.addEventListener('keydown', (e) => this.handleKeyboardShortcuts(e));
+    }
+
+    async toggleSection() {
+        const toggle = document.getElementById('git-toggle');
+        const content = document.getElementById('git-content');
+        const icon = toggle.querySelector('.toggle-icon');
+        
+        this.isExpanded = !this.isExpanded;
+        
+        if (this.isExpanded) {
+            content.style.display = 'block';
+            icon.textContent = '▼';
+            toggle.setAttribute('data-expanded', 'true');
+            toggle.setAttribute('aria-expanded', 'true');
+            this.announceToScreenReader('Git changes section expanded');
+            await this.loadGitStatus();
+        } else {
+            content.style.display = 'none';
+            icon.textContent = '▶';
+            toggle.setAttribute('data-expanded', 'false');
+            toggle.setAttribute('aria-expanded', 'false');
+            this.announceToScreenReader('Git changes section collapsed');
+        }
+    }
+
+    async loadGitStatus() {
+        if (!this.isExpanded) return;
+        
+        const startTime = performance.now();
+        this.showLoading();
+        
+        try {
+            const response = await fetch('/api/git/status', {
+                headers: {
+                    'Authorization': `Bearer ${this.getAuthToken()}`
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            const status = await response.json();
+            this.renderGitStatus(status);
+            
+            // Track performance
+            const duration = performance.now() - startTime;
+            this.trackPerformance('git-status', duration);
+            
+        } catch (error) {
+            console.error('Error loading git status:', error);
+            this.showError('Failed to load git status');
+        } finally {
+            this.hideLoading();
+        }
+    }
+
+    renderGitStatus(status) {
+        this.currentBranch = status.branch;
+        this.gitFiles = status.files;
+        
+        // Update branch info
+        this.renderBranchInfo(status.branch);
+        
+        // Update file list
+        this.renderFileList(status.files, status.isClean);
+        
+        // Update counter
+        this.updateFileCounter(status.files.length);
+    }
+
+    renderBranchInfo(branch) {
+        const branchName = document.getElementById('branch-name');
+        const branchStatus = document.getElementById('branch-status');
+        const commitHash = document.getElementById('commit-hash');
+        const commitMessage = document.getElementById('commit-message');
+        
+        if (branchName) branchName.textContent = branch.branch;
+        
+        if (branchStatus) {
+            let statusText = 'up to date';
+            if (branch.ahead > 0 && branch.behind > 0) {
+                statusText = `${branch.ahead} ahead, ${branch.behind} behind`;
+            } else if (branch.ahead > 0) {
+                statusText = `${branch.ahead} ahead`;
+            } else if (branch.behind > 0) {
+                statusText = `${branch.behind} behind`;
+            }
+            branchStatus.textContent = statusText;
+        }
+        
+        if (commitHash) commitHash.textContent = `#${branch.lastCommit.hash}`;
+        if (commitMessage) commitMessage.textContent = branch.lastCommit.message;
+    }
+
+    renderFileList(files, isClean) {
+        const gitFiles = document.getElementById('git-files');
+        const gitClean = document.getElementById('git-clean');
+        const gitNoResults = document.getElementById('git-no-results');
+        
+        if (isClean) {
+            gitFiles.style.display = 'none';
+            gitClean.style.display = 'flex';
+            gitNoResults.style.display = 'none';
+            this.updateFileCounter(0);
+            return;
+        }
+        
+        // Filter files based on search and status
+        this.filteredFiles = this.filterFiles(files);
+        
+        if (this.filteredFiles.length === 0 && (this.currentSearch || this.currentFilter !== 'all')) {
+            // Show no results if we have search/filter but no matches
+            gitFiles.style.display = 'none';
+            gitClean.style.display = 'none';
+            gitNoResults.style.display = 'flex';
+        } else if (this.filteredFiles.length === 0) {
+            // Show clean state if no files at all
+            gitFiles.style.display = 'none';
+            gitClean.style.display = 'flex';
+            gitNoResults.style.display = 'none';
+        } else {
+            // Show filtered files
+            gitFiles.style.display = 'block';
+            gitClean.style.display = 'none';
+            gitNoResults.style.display = 'none';
+            gitFiles.innerHTML = '';
+            
+            this.filteredFiles.forEach(file => {
+                const fileItem = this.createFileItem(file);
+                gitFiles.appendChild(fileItem);
+            });
+        }
+        
+        this.updateFileCounter(this.filteredFiles.length);
+    }
+
+    createFileItem(file) {
+        const item = document.createElement('div');
+        item.className = 'git-file-item';
+        item.tabIndex = 0; // Make focusable
+        item.setAttribute('role', 'listitem');
+        item.setAttribute('aria-label', `${file.path}, ${this.getStatusText(file.status, file.staged, file.unstaged)}, ${file.additions || 0} additions, ${file.deletions || 0} deletions`);
+        item.addEventListener('click', () => this.showFileDiff(file.path));
+        
+        // Handle keyboard interaction on individual files
+        item.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                this.showFileDiff(file.path);
+            } else if (e.key === 's' && e.ctrlKey) {
+                e.preventDefault();
+                this.stageFile(file.path);
+                // Announce action to screen readers
+                this.announceToScreenReader(`Staging ${file.path}`);
+            } else if (e.key === 'd' && e.ctrlKey && e.shiftKey) {
+                e.preventDefault();
+                this.confirmAction('discard', file.path);
+                this.announceToScreenReader(`Discarding changes to ${file.path}`);
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                this.focusNextFileItem(item);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                this.focusPreviousFileItem(item);
+            }
+        });
+
+        // Add swipe gesture support for mobile
+        this.addSwipeGestures(item, file);
+        
+        // Add performance timing
+        const startTime = performance.now();
+        
+        const statusIcon = this.getStatusIcon(file.status);
+        const statusClass = `git-file-status--${file.status}`;
+        
+        // Determine which action buttons to show
+        let actionButtons = '';
+        
+        if (file.unstaged && !file.staged) {
+            // Unstaged changes only
+            actionButtons = `
+                <button class="git-action-btn git-action-btn--stage" onclick="event.stopPropagation(); gitChanges.stageFile('${file.path}')">Stage</button>
+                <button class="git-action-btn git-action-btn--discard" onclick="event.stopPropagation(); gitChanges.confirmAction('discard', '${file.path}')">Discard</button>
+            `;
+        } else if (file.staged && !file.unstaged) {
+            // Staged changes only
+            actionButtons = `
+                <button class="git-action-btn git-action-btn--unstage" onclick="event.stopPropagation(); gitChanges.unstageFile('${file.path}')">Unstage</button>
+            `;
+        } else if (file.staged && file.unstaged) {
+            // Both staged and unstaged changes
+            actionButtons = `
+                <button class="git-action-btn git-action-btn--stage" onclick="event.stopPropagation(); gitChanges.stageFile('${file.path}')">Stage</button>
+                <button class="git-action-btn git-action-btn--unstage" onclick="event.stopPropagation(); gitChanges.unstageFile('${file.path}')">Unstage</button>
+                <button class="git-action-btn git-action-btn--discard" onclick="event.stopPropagation(); gitChanges.confirmAction('discard', '${file.path}')">Discard</button>
+            `;
+        } else {
+            // Untracked files
+            actionButtons = `
+                <button class="git-action-btn git-action-btn--stage" onclick="event.stopPropagation(); gitChanges.stageFile('${file.path}')">Add</button>
+                <button class="git-action-btn git-action-btn--discard" onclick="event.stopPropagation(); gitChanges.confirmAction('discard', '${file.path}')">Delete</button>
+            `;
+        }
+        
+        item.innerHTML = `
+            <div class="git-file-status ${statusClass}">${statusIcon}</div>
+            <div class="git-file-info">
+                <div class="git-file-path">${file.path}</div>
+                <div class="git-file-changes">
+                    ${file.additions ? `<span class="git-file-additions">+${file.additions}</span>` : ''}
+                    ${file.deletions ? `<span class="git-file-deletions">-${file.deletions}</span>` : ''}
+                    <span>${this.getStatusText(file.status, file.staged, file.unstaged)}</span>
+                </div>
+            </div>
+            <div class="git-file-actions">
+                ${actionButtons}
+                <button class="git-action-btn" onclick="event.stopPropagation(); gitChanges.addToQueue('${file.path}')">Queue</button>
+            </div>
+        `;
+        
+        return item;
+    }
+
+    getStatusIcon(status) {
+        const icons = {
+            'modified': 'M',
+            'added': 'A',
+            'deleted': 'D',
+            'renamed': 'R',
+            'copied': 'C',
+            'untracked': '??'
+        };
+        return icons[status] || '?';
+    }
+
+    getStatusText(status, staged, unstaged) {
+        if (staged && unstaged) return 'staged + modified';
+        if (staged) return 'staged';
+        if (unstaged) return 'modified';
+        return status;
+    }
+
+    async showFileDiff(filePath, compareMode = 'working') {
+        this.currentDiffFile = filePath;
+        
+        const modal = document.getElementById('diff-viewer-modal');
+        const fileName = document.getElementById('diff-file-name');
+        const filePath_el = document.getElementById('diff-file-path');
+        
+        if (fileName) fileName.textContent = filePath.split('/').pop();
+        if (filePath_el) filePath_el.textContent = filePath;
+        
+        modal.style.display = 'flex';
+        
+        await this.loadFileDiff(filePath, compareMode);
+    }
+
+    async loadFileDiff(filePath, compareMode = 'working') {
+        const startTime = performance.now();
+        this.showDiffLoading();
+        
+        try {
+            const response = await fetch(`/api/git/file-diff/${encodeURIComponent(filePath)}?compare=${compareMode}`, {
+                headers: {
+                    'Authorization': `Bearer ${this.getAuthToken()}`
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            const diff = await response.json();
+            this.renderDiff(diff);
+            
+            // Track performance
+            const duration = performance.now() - startTime;
+            this.trackPerformance('file-diff', duration);
+            
+        } catch (error) {
+            console.error('Error loading diff:', error);
+            this.showDiffError('Failed to load diff');
+        } finally {
+            this.hideDiffLoading();
+        }
+    }
+
+    renderDiff(diff) {
+        // Update stats
+        const additions = document.getElementById('diff-additions');
+        const deletions = document.getElementById('diff-deletions');
+        const fileType = document.getElementById('diff-file-type');
+        
+        if (additions) additions.textContent = `+${diff.additions}`;
+        if (deletions) deletions.textContent = `-${diff.deletions}`;
+        if (fileType) fileType.textContent = diff.isBinary ? 'binary' : 'text';
+        
+        // Render diff lines
+        const diffLines = document.getElementById('diff-lines');
+        if (diffLines) {
+            diffLines.innerHTML = '';
+            
+            if (diff.isBinary) {
+                diffLines.innerHTML = '<div class="diff-line diff-line--header">Binary file (cannot display diff)</div>';
+                return;
+            }
+            
+            diff.lines.forEach((line, index) => {
+                const lineEl = this.createDiffLine(line, index);
+                diffLines.appendChild(lineEl);
+                
+                // Add expand control if this is a hunk line with expansion capability
+                if (line.type === 'hunk' && lineEl.expandControl) {
+                    diffLines.appendChild(lineEl.expandControl);
+                }
+            });
+        }
+    }
+
+    createDiffLine(line, index) {
+        const lineEl = document.createElement('div');
+        lineEl.className = `diff-line diff-line--${line.type}`;
+        
+        if (line.type === 'header') {
+            lineEl.innerHTML = `<span class="diff-line-content">${this.escapeHtml(line.content)}</span>`;
+        } else if (line.type === 'hunk') {
+            lineEl.innerHTML = `<span class="diff-line-content">${this.escapeHtml(line.content)}</span>`;
+            
+            // Add expandable controls if this hunk can be expanded
+            if (line.expandable) {
+                const expandEl = document.createElement('div');
+                expandEl.className = 'diff-line diff-line--expand';
+                expandEl.innerHTML = `
+                    <div class="expand-controls">
+                        ${line.expandBefore > 0 ? `<button class="expand-btn" onclick="gitChanges.expandContext(${index}, 'before', ${line.expandBefore})">↑ Expand ${line.expandBefore} lines above</button>` : ''}
+                        ${line.expandAfter > 0 ? `<button class="expand-btn" onclick="gitChanges.expandContext(${index}, 'after', ${line.expandAfter})">↓ Expand ${line.expandAfter} lines below</button>` : ''}
+                    </div>
+                `;
+                
+                // Insert the expand control after the hunk header
+                lineEl.expandControl = expandEl;
+            }
+        } else {
+            const oldNum = line.oldLineNumber ? line.oldLineNumber.toString() : '';
+            const newNum = line.newLineNumber ? line.newLineNumber.toString() : '';
+            
+            lineEl.innerHTML = `
+                <span class="diff-line-number">${oldNum}</span>
+                <span class="diff-line-number">${newNum}</span>
+                <span class="diff-line-content">${this.escapeHtml(line.content)}</span>
+            `;
+        }
+        
+        return lineEl;
+    }
+
+    closeDiffViewer() {
+        const modal = document.getElementById('diff-viewer-modal');
+        modal.style.display = 'none';
+        this.currentDiffFile = null;
+    }
+
+    copyDiff() {
+        const diffLines = document.getElementById('diff-lines');
+        if (diffLines) {
+            const text = Array.from(diffLines.children)
+                .map(line => line.textContent)
+                .join('\n');
+            
+            navigator.clipboard.writeText(text).then(() => {
+                this.showToast('Diff copied to clipboard');
+            }).catch(() => {
+                this.showToast('Failed to copy diff');
+            });
+        }
+    }
+
+    viewFile(filePath) {
+        // Use file explorer to view file
+        if (window.fileExplorer) {
+            window.fileExplorer.viewFile(filePath);
+        }
+    }
+
+    addToQueue(filePath) {
+        const message = `Review changes in file: ${filePath}`;
+        // Use mobile interface to add message
+        if (window.mobileInterface) {
+            window.mobileInterface.showAddMessageModal(message);
+        }
+    }
+
+    showBranchInfo() {
+        if (this.currentBranch) {
+            const info = `Branch: ${this.currentBranch.branch}\nCommit: ${this.currentBranch.lastCommit.hash}\nAuthor: ${this.currentBranch.lastCommit.author}\nMessage: ${this.currentBranch.lastCommit.message}`;
+            this.showToast(info);
+        }
+    }
+
+    showLoading() {
+        const loading = document.getElementById('git-loading');
+        const files = document.getElementById('git-files');
+        const clean = document.getElementById('git-clean');
+        
+        if (loading) loading.style.display = 'flex';
+        if (files) files.style.display = 'none';
+        if (clean) clean.style.display = 'none';
+    }
+
+    hideLoading() {
+        const loading = document.getElementById('git-loading');
+        if (loading) loading.style.display = 'none';
+    }
+
+    showDiffLoading() {
+        const loading = document.getElementById('diff-loading');
+        const content = document.getElementById('diff-content');
+        const error = document.getElementById('diff-error');
+        
+        if (loading) loading.style.display = 'flex';
+        if (content) content.style.display = 'none';
+        if (error) error.style.display = 'none';
+    }
+
+    hideDiffLoading() {
+        const loading = document.getElementById('diff-loading');
+        const content = document.getElementById('diff-content');
+        
+        if (loading) loading.style.display = 'none';
+        if (content) content.style.display = 'block';
+    }
+
+    showDiffError(message) {
+        const error = document.getElementById('diff-error');
+        const content = document.getElementById('diff-content');
+        
+        if (error) {
+            error.style.display = 'flex';
+            error.querySelector('.error-text').textContent = message;
+        }
+        if (content) content.style.display = 'none';
+    }
+
+    showError(message) {
+        console.error('GitChanges Error:', message);
+        this.showToast(message);
+    }
+
+    updateFileCounter(count) {
+        const counter = document.getElementById('git-file-counter');
+        if (counter) {
+            counter.textContent = `${count} files`;
+            counter.setAttribute('data-count', count);
+        }
+    }
+
+    getAuthToken() {
+        return window.mobileInterface?.authToken || '';
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    showToast(message) {
+        if (window.mobileInterface) {
+            window.mobileInterface.showToast(message);
+        } else {
+            console.log('Toast:', message);
+        }
+    }
+
+    // Git Operations
+    async stageFile(filePath) {
+        const startTime = performance.now();
+        
+        // Add animation to file item
+        this.animateFileOperation(filePath, 'staging');
+        
+        try {
+            const response = await fetch('/api/git/stage', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.getAuthToken()}`
+                },
+                body: JSON.stringify({ filePath })
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+                this.showToast(result.message);
+                await this.loadGitStatus(); // Refresh status
+                
+                // Track performance
+                const duration = performance.now() - startTime;
+                this.trackPerformance('stage-file', duration);
+            } else {
+                this.showError(result.message);
+            }
+        } catch (error) {
+            console.error('Error staging file:', error);
+            this.showError('Failed to stage file');
+        } finally {
+            // Remove animation class after operation
+            setTimeout(() => this.clearFileAnimation(filePath, 'staging'), 800);
+        }
+    }
+
+    async unstageFile(filePath) {
+        const startTime = performance.now();
+        
+        // Add animation to file item
+        this.animateFileOperation(filePath, 'unstaging');
+        
+        try {
+            const response = await fetch('/api/git/unstage', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.getAuthToken()}`
+                },
+                body: JSON.stringify({ filePath })
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+                this.showToast(result.message);
+                await this.loadGitStatus(); // Refresh status
+                
+                // Track performance
+                const duration = performance.now() - startTime;
+                this.trackPerformance('unstage-file', duration);
+            } else {
+                this.showError(result.message);
+            }
+        } catch (error) {
+            console.error('Error unstaging file:', error);
+            this.showError('Failed to unstage file');
+        } finally {
+            // Remove animation class after operation
+            setTimeout(() => this.clearFileAnimation(filePath, 'unstaging'), 800);
+        }
+    }
+
+    async discardFile(filePath) {
+        const startTime = performance.now();
+        
+        // Add animation to file item
+        this.animateFileOperation(filePath, 'discarding');
+        
+        try {
+            const response = await fetch('/api/git/discard', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.getAuthToken()}`
+                },
+                body: JSON.stringify({ filePath })
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+                this.showToast(result.message);
+                await this.loadGitStatus(); // Refresh status
+                
+                // Track performance
+                const duration = performance.now() - startTime;
+                this.trackPerformance('discard-file', duration);
+            } else {
+                this.showError(result.message);
+            }
+        } catch (error) {
+            console.error('Error discarding changes:', error);
+            this.showError('Failed to discard changes');
+        } finally {
+            // Remove animation class after operation
+            setTimeout(() => this.clearFileAnimation(filePath, 'discarding'), 600);
+        }
+    }
+
+    async stageAllFiles() {
+        try {
+            const response = await fetch('/api/git/stage-all', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${this.getAuthToken()}`
+                }
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+                this.showToast(result.message);
+                await this.loadGitStatus(); // Refresh status
+            } else {
+                this.showError(result.message);
+            }
+        } catch (error) {
+            console.error('Error staging all files:', error);
+            this.showError('Failed to stage all files');
+        }
+    }
+
+    async unstageAllFiles() {
+        try {
+            const response = await fetch('/api/git/unstage-all', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${this.getAuthToken()}`
+                }
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+                this.showToast(result.message);
+                await this.loadGitStatus(); // Refresh status
+            } else {
+                this.showError(result.message);
+            }
+        } catch (error) {
+            console.error('Error unstaging all files:', error);
+            this.showError('Failed to unstage all files');
+        }
+    }
+
+    // Confirmation Modal Methods
+    confirmAction(action, filePath = null) {
+        this.pendingAction = { action, filePath };
+        
+        const modal = document.getElementById('git-confirm-modal');
+        const title = document.getElementById('git-confirm-title');
+        const icon = document.getElementById('git-confirm-icon');
+        const message = document.getElementById('git-confirm-message');
+        const details = document.getElementById('git-confirm-details');
+        
+        let config = this.getActionConfig(action, filePath);
+        
+        if (title) title.textContent = config.title;
+        if (icon) icon.textContent = config.icon;
+        if (message) message.textContent = config.message;
+        if (details) details.textContent = config.details;
+        
+        modal.style.display = 'flex';
+    }
+
+    getActionConfig(action, filePath) {
+        const configs = {
+            'discard': {
+                title: 'Discard Changes',
+                icon: '⚠️',
+                message: filePath ? `Discard changes in ${filePath}?` : 'Discard all changes?',
+                details: 'This action cannot be undone. All changes will be permanently lost.'
+            },
+            'stage-all': {
+                title: 'Stage All Files',
+                icon: '📥',
+                message: 'Stage all modified files?',
+                details: 'This will prepare all changes for commit.'
+            },
+            'unstage-all': {
+                title: 'Unstage All Files',
+                icon: '📤',
+                message: 'Unstage all staged files?',
+                details: 'This will move all staged changes back to working directory.'
+            }
+        };
+        
+        return configs[action] || {
+            title: 'Confirm Action',
+            icon: '❓',
+            message: 'Are you sure?',
+            details: 'This action will be performed.'
+        };
+    }
+
+    async executeAction() {
+        if (!this.pendingAction) return;
+        
+        const { action, filePath } = this.pendingAction;
+        
+        this.closeConfirmModal();
+        
+        switch (action) {
+            case 'discard':
+                if (filePath) {
+                    await this.discardFile(filePath);
+                }
+                break;
+                
+            case 'stage-all':
+                await this.stageAllFiles();
+                break;
+                
+            case 'unstage-all':
+                await this.unstageAllFiles();
+                break;
+        }
+        
+        this.pendingAction = null;
+    }
+
+    closeConfirmModal() {
+        const modal = document.getElementById('git-confirm-modal');
+        modal.style.display = 'none';
+        this.pendingAction = null;
+    }
+
+    // Context Expansion
+    async expandContext(hunkIndex, direction, numLines) {
+        if (!this.currentDiffFile) return;
+        
+        try {
+            const compareMode = document.getElementById('diff-compare-mode')?.value || 'working';
+            
+            // Calculate the start line based on the hunk and direction
+            const diffLines = document.getElementById('diff-lines');
+            const hunkLine = diffLines.children[hunkIndex];
+            
+            if (!hunkLine) return;
+            
+            // Parse the hunk header to get line numbers
+            const hunkText = hunkLine.textContent;
+            const match = hunkText.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+            
+            if (!match) return;
+            
+            const oldLineStart = parseInt(match[1]);
+            let startLine;
+            
+            if (direction === 'before') {
+                startLine = Math.max(0, oldLineStart - numLines - 1);
+            } else {
+                // For after, we need to find the end of this hunk
+                startLine = oldLineStart + 10; // Rough estimate, could be improved
+            }
+            
+            const response = await fetch(`/api/git/expand-context/${encodeURIComponent(this.currentDiffFile)}?startLine=${startLine}&numLines=${numLines}&compare=${compareMode}`, {
+                headers: {
+                    'Authorization': `Bearer ${this.getAuthToken()}`
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            const result = await response.json();
+            
+            // Insert the expanded context lines
+            this.insertExpandedContext(hunkIndex, direction, result.lines);
+            
+        } catch (error) {
+            console.error('Error expanding context:', error);
+            this.showError('Failed to expand context');
+        }
+    }
+
+    insertExpandedContext(hunkIndex, direction, contextLines) {
+        const diffLines = document.getElementById('diff-lines');
+        const hunkLine = diffLines.children[hunkIndex];
+        const expandControl = diffLines.children[hunkIndex + 1];
+        
+        if (!hunkLine || !expandControl) return;
+        
+        // Create elements for the new context lines
+        const fragment = document.createDocumentFragment();
+        
+        contextLines.forEach(line => {
+            const lineEl = this.createDiffLine(line);
+            fragment.appendChild(lineEl);
+        });
+        
+        // Insert the context lines in the right place
+        if (direction === 'before') {
+            diffLines.insertBefore(fragment, hunkLine);
+        } else {
+            // Find the next hunk or end of diff to insert after
+            let insertPoint = expandControl.nextSibling;
+            while (insertPoint && !insertPoint.classList.contains('diff-line--hunk')) {
+                insertPoint = insertPoint.nextSibling;
+            }
+            
+            if (insertPoint) {
+                diffLines.insertBefore(fragment, insertPoint);
+            } else {
+                diffLines.appendChild(fragment);
+            }
+        }
+        
+        // Update the expand control to show fewer lines or remove it
+        this.updateExpandControl(expandControl, direction, contextLines.length);
+        
+        this.showToast(`Expanded ${contextLines.length} context lines`);
+    }
+
+    updateExpandControl(expandControl, direction, expandedLines) {
+        // Simple implementation: just remove the used expand button
+        const buttons = expandControl.querySelectorAll('.expand-btn');
+        buttons.forEach(btn => {
+            if ((direction === 'before' && btn.textContent.includes('above')) ||
+                (direction === 'after' && btn.textContent.includes('below'))) {
+                btn.style.opacity = '0.5';
+                btn.disabled = true;
+                btn.textContent = btn.textContent.replace(/\d+ lines/, `${expandedLines} lines expanded`);
+            }
+        });
+    }
+
+    // Search and Filter Methods
+    toggleSearch() {
+        this.searchVisible = !this.searchVisible;
+        const searchContainer = document.getElementById('git-search-container');
+        const searchToggle = document.getElementById('git-search-toggle');
+        
+        if (this.searchVisible) {
+            searchContainer.style.display = 'block';
+            searchToggle.style.background = 'var(--primary-blue)';
+            searchToggle.style.color = 'white';
+            
+            // Focus the search input
+            const searchInput = document.getElementById('git-search-input');
+            if (searchInput) {
+                setTimeout(() => searchInput.focus(), 100);
+            }
+        } else {
+            searchContainer.style.display = 'none';
+            searchToggle.style.background = '';
+            searchToggle.style.color = '';
+            
+            // Clear search when hiding
+            this.clearSearch();
+        }
+    }
+
+    handleSearch(query) {
+        clearTimeout(this.searchTimeout);
+        this.searchTimeout = setTimeout(() => {
+            this.currentSearch = query.toLowerCase().trim();
+            this.searchMode = this.detectSearchMode(query);
+            this.refreshFileDisplay();
+            
+            // Show/hide clear button
+            const clearBtn = document.getElementById('git-search-clear');
+            if (clearBtn) {
+                clearBtn.style.display = this.currentSearch ? 'block' : 'none';
+            }
+            
+            // If content search, perform async content search
+            if (this.searchMode === 'content') {
+                this.performContentSearch(query);
+            }
+        }, 300);
+    }
+
+    detectSearchMode(query) {
+        // Check if query looks like regex (contains special regex characters)
+        const regexPattern = /[.*+?^${}()|[\]\\]/;
+        if (regexPattern.test(query) && query.length > 1) {
+            try {
+                new RegExp(query, 'i');
+                return 'regex';
+            } catch (e) {
+                return 'text';
+            }
+        }
+        
+        // Check if query contains content search syntax (e.g., "content:function")
+        if (query.includes('content:')) {
+            return 'content';
+        }
+        
+        return 'text';
+    }
+
+    async performContentSearch(query) {
+        if (!query.includes('content:')) return;
+        
+        const searchTerm = query.replace('content:', '').trim();
+        if (!searchTerm) return;
+        
+        try {
+            const response = await fetch(`/api/git/search-content?q=${encodeURIComponent(searchTerm)}`, {
+                headers: {
+                    'Authorization': `Bearer ${this.getAuthToken()}`
+                }
+            });
+            
+            if (response.ok) {
+                const results = await response.json();
+                this.highlightContentMatches(results);
+            }
+        } catch (error) {
+            console.error('Content search failed:', error);
+        }
+    }
+
+    highlightContentMatches(results) {
+        const gitFiles = document.getElementById('git-files');
+        if (!gitFiles) return;
+        
+        const fileItems = gitFiles.querySelectorAll('.git-file-item');
+        fileItems.forEach(item => {
+            const filePath = item.querySelector('.git-file-path').textContent;
+            const match = results.find(r => r.path === filePath);
+            
+            if (match) {
+                item.classList.add('has-content-match');
+                const matchInfo = document.createElement('div');
+                matchInfo.className = 'content-match-info';
+                matchInfo.textContent = `${match.matches} match${match.matches !== 1 ? 'es' : ''}`;
+                item.querySelector('.git-file-info').appendChild(matchInfo);
+            } else {
+                item.classList.remove('has-content-match');
+                const existing = item.querySelector('.content-match-info');
+                if (existing) existing.remove();
+            }
+        });
+    }
+
+    clearSearch() {
+        this.currentSearch = '';
+        const searchInput = document.getElementById('git-search-input');
+        const clearBtn = document.getElementById('git-search-clear');
+        
+        if (searchInput) searchInput.value = '';
+        if (clearBtn) clearBtn.style.display = 'none';
+        
+        this.refreshFileDisplay();
+    }
+
+    setFilter(status) {
+        this.currentFilter = status;
+        
+        // Update active filter button and ARIA states
+        const filterButtons = document.querySelectorAll('.filter-btn');
+        filterButtons.forEach(btn => {
+            const isActive = btn.getAttribute('data-status') === status;
+            btn.classList.toggle('active', isActive);
+            btn.setAttribute('aria-checked', isActive.toString());
+        });
+        
+        this.refreshFileDisplay();
+        this.announceToScreenReader(`Filter set to ${status}`);
+    }
+
+    filterFiles(files) {
+        let filtered = [...files];
+        
+        // Apply search filter with different modes
+        if (this.currentSearch) {
+            filtered = filtered.filter(file => {
+                if (this.searchMode === 'regex') {
+                    try {
+                        const regex = new RegExp(this.currentSearch, 'i');
+                        return regex.test(file.path);
+                    } catch (e) {
+                        // Fallback to text search if regex is invalid
+                        return file.path.toLowerCase().includes(this.currentSearch);
+                    }
+                } else if (this.searchMode === 'content') {
+                    // Content search filtering will be handled by highlightContentMatches
+                    return true;
+                } else {
+                    // Default text search
+                    return file.path.toLowerCase().includes(this.currentSearch);
+                }
+            });
+        }
+        
+        // Apply status filter
+        if (this.currentFilter !== 'all') {
+            filtered = filtered.filter(file => {
+                switch (this.currentFilter) {
+                    case 'modified':
+                        return file.status === 'modified';
+                    case 'added':
+                        return file.status === 'added';
+                    case 'deleted':
+                        return file.status === 'deleted';
+                    case 'staged':
+                        return file.staged;
+                    default:
+                        return true;
+                }
+            });
+        }
+        
+        return filtered;
+    }
+
+    refreshFileDisplay() {
+        if (this.gitFiles.length > 0) {
+            this.renderFileList(this.gitFiles, false);
+        }
+    }
+
+    // Keyboard Shortcuts
+    handleKeyboardShortcuts(e) {
+        // Only handle shortcuts when git section is expanded and no modal is open
+        if (!this.isExpanded || this.isDiffModalOpen() || this.isConfirmModalOpen()) {
+            return;
+        }
+
+        // Don't interfere with typing in inputs
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            return;
+        }
+
+        const key = e.key.toLowerCase();
+        const ctrl = e.ctrlKey || e.metaKey;
+        const shift = e.shiftKey;
+
+        // Handle different keyboard shortcuts
+        switch (key) {
+            case 'r':
+                if (ctrl) {
+                    e.preventDefault();
+                    this.loadGitStatus();
+                    this.showToast('Git status refreshed');
+                }
+                break;
+
+            case 'f':
+                if (ctrl) {
+                    e.preventDefault();
+                    this.toggleSearch();
+                }
+                break;
+
+            case '/':
+                if (!ctrl) {
+                    e.preventDefault();
+                    this.toggleSearch();
+                }
+                break;
+
+            case 'escape':
+                if (this.searchVisible) {
+                    e.preventDefault();
+                    this.toggleSearch();
+                }
+                break;
+
+            case 'a':
+                if (ctrl && shift) {
+                    e.preventDefault();
+                    this.confirmAction('stage-all');
+                }
+                break;
+
+            case 'u':
+                if (ctrl && shift) {
+                    e.preventDefault();
+                    this.confirmAction('unstage-all');
+                }
+                break;
+
+            case '1':
+            case '2':
+            case '3':
+            case '4':
+            case '5':
+                if (ctrl) {
+                    e.preventDefault();
+                    const filters = ['all', 'modified', 'added', 'deleted', 'staged'];
+                    const filterIndex = parseInt(key) - 1;
+                    if (filterIndex < filters.length) {
+                        this.setFilter(filters[filterIndex]);
+                    }
+                }
+                break;
+
+            case 'enter':
+                // If a file is focused/highlighted, open its diff
+                const focused = document.querySelector('.git-file-item:focus');
+                if (focused) {
+                    e.preventDefault();
+                    const filePath = this.getFilePathFromElement(focused);
+                    if (filePath) {
+                        this.showFileDiff(filePath);
+                    }
+                }
+                break;
+
+            case 'arrowdown':
+            case 'arrowup':
+                // Navigate between files
+                if (!shift && !ctrl) {
+                    e.preventDefault();
+                    this.navigateFiles(key === 'arrowdown' ? 1 : -1);
+                }
+                break;
+
+            case 's':
+                // Stage focused file
+                if (ctrl) {
+                    e.preventDefault();
+                    const focused = document.querySelector('.git-file-item:focus');
+                    if (focused) {
+                        const filePath = this.getFilePathFromElement(focused);
+                        if (filePath) {
+                            this.stageFile(filePath);
+                        }
+                    }
+                }
+                break;
+
+            case 'd':
+                // Discard focused file (with confirmation)
+                if (ctrl && shift) {
+                    e.preventDefault();
+                    const focused = document.querySelector('.git-file-item:focus');
+                    if (focused) {
+                        const filePath = this.getFilePathFromElement(focused);
+                        if (filePath) {
+                            this.confirmAction('discard', filePath);
+                        }
+                    }
+                }
+                break;
+        }
+    }
+
+    isDiffModalOpen() {
+        const modal = document.getElementById('diff-viewer-modal');
+        return modal && modal.style.display === 'flex';
+    }
+
+    isConfirmModalOpen() {
+        const modal = document.getElementById('git-confirm-modal');
+        return modal && modal.style.display === 'flex';
+    }
+
+    getFilePathFromElement(element) {
+        const pathElement = element.querySelector('.git-file-path');
+        return pathElement ? pathElement.textContent : null;
+    }
+
+    navigateFiles(direction) {
+        const fileItems = document.querySelectorAll('.git-file-item');
+        if (fileItems.length === 0) return;
+
+        let currentIndex = -1;
+        const focused = document.querySelector('.git-file-item:focus');
+        
+        if (focused) {
+            currentIndex = Array.from(fileItems).indexOf(focused);
+        }
+
+        let newIndex = currentIndex + direction;
+        if (newIndex < 0) newIndex = fileItems.length - 1;
+        if (newIndex >= fileItems.length) newIndex = 0;
+
+        // Remove focus from current item
+        if (focused) {
+            focused.blur();
+            focused.classList.remove('focused');
+        }
+
+        // Focus new item
+        const newItem = fileItems[newIndex];
+        newItem.focus();
+        newItem.classList.add('focused');
+        newItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    showKeyboardHelp() {
+        const shortcuts = [
+            'Ctrl+R - Refresh git status',
+            'Ctrl+F or / - Toggle search',
+            'Esc - Close search',
+            'Ctrl+Shift+A - Stage all files',
+            'Ctrl+Shift+U - Unstage all files',
+            'Ctrl+1-5 - Filter by status',
+            '↑/↓ - Navigate files',
+            'Enter - View diff',
+            'Ctrl+S - Stage file',
+            'Ctrl+Shift+D - Discard file'
+        ];
+        
+        const helpText = shortcuts.join('\n');
+        this.showToast('Keyboard Shortcuts:\n' + helpText);
+    }
+
+    // Swipe Gestures for Mobile
+    addSwipeGestures(element, file) {
+        let startX = 0;
+        let startY = 0;
+        let startTime = 0;
+        let isSwipeActive = false;
+        const swipeThreshold = 80; // Minimum distance for swipe
+        const timeThreshold = 500; // Maximum time in ms
+        
+        // Create swipe indicator
+        const swipeIndicator = document.createElement('div');
+        swipeIndicator.className = 'swipe-indicator';
+        element.appendChild(swipeIndicator);
+        
+        element.addEventListener('touchstart', (e) => {
+            const touch = e.touches[0];
+            startX = touch.clientX;
+            startY = touch.clientY;
+            startTime = Date.now();
+            isSwipeActive = true;
+            
+            // Prevent scrolling during potential swipe
+            if (Math.abs(touch.clientX - startX) > 10) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+        
+        element.addEventListener('touchmove', (e) => {
+            if (!isSwipeActive) return;
+            
+            const touch = e.touches[0];
+            const diffX = touch.clientX - startX;
+            const diffY = touch.clientY - startY;
+            
+            // If more vertical than horizontal movement, cancel swipe
+            if (Math.abs(diffY) > Math.abs(diffX)) {
+                isSwipeActive = false;
+                this.resetSwipeIndicator(swipeIndicator);
+                return;
+            }
+            
+            // Show swipe feedback
+            if (Math.abs(diffX) > 20) {
+                e.preventDefault();
+                this.updateSwipeIndicator(swipeIndicator, diffX, file);
+            }
+        }, { passive: false });
+        
+        element.addEventListener('touchend', (e) => {
+            if (!isSwipeActive) return;
+            
+            const touch = e.changedTouches[0];
+            const diffX = touch.clientX - startX;
+            const diffY = touch.clientY - startY;
+            const timeDiff = Date.now() - startTime;
+            
+            isSwipeActive = false;
+            
+            // Check if it's a valid swipe
+            if (Math.abs(diffX) > swipeThreshold && 
+                Math.abs(diffY) < 50 && 
+                timeDiff < timeThreshold) {
+                
+                if (diffX > 0) {
+                    // Swipe right - Stage file
+                    this.handleSwipeAction('stage', file);
+                } else {
+                    // Swipe left - Discard/Delete file
+                    this.handleSwipeAction('discard', file);
+                }
+            }
+            
+            this.resetSwipeIndicator(swipeIndicator);
+        });
+    }
+    
+    updateSwipeIndicator(indicator, diffX, file) {
+        const progress = Math.min(Math.abs(diffX) / 80, 1);
+        const direction = diffX > 0 ? 'right' : 'left';
+        
+        indicator.style.display = 'flex';
+        indicator.style.opacity = progress;
+        
+        if (direction === 'right') {
+            indicator.className = 'swipe-indicator swipe-indicator--stage';
+            indicator.innerHTML = `<span class="swipe-icon">📥</span><span class="swipe-text">Stage</span>`;
+            indicator.style.left = '0';
+            indicator.style.right = 'auto';
+        } else {
+            indicator.className = 'swipe-indicator swipe-indicator--discard';
+            indicator.innerHTML = `<span class="swipe-icon">🗑️</span><span class="swipe-text">Discard</span>`;
+            indicator.style.right = '0';
+            indicator.style.left = 'auto';
+        }
+    }
+    
+    resetSwipeIndicator(indicator) {
+        indicator.style.display = 'none';
+        indicator.style.opacity = '0';
+    }
+    
+    handleSwipeAction(action, file) {
+        // Add haptic feedback if available
+        if (navigator.vibrate) {
+            navigator.vibrate(50);
+        }
+        
+        if (action === 'stage') {
+            this.stageFile(file.path);
+            this.showToast(`📥 Staged: ${file.path.split('/').pop()}`);
+        } else if (action === 'discard') {
+            this.confirmAction('discard', file.path);
+        }
+    }
+
+    // Accessibility helpers
+    announceToScreenReader(message) {
+        const announcement = document.createElement('div');
+        announcement.setAttribute('aria-live', 'polite');
+        announcement.setAttribute('aria-atomic', 'true');
+        announcement.className = 'sr-only';
+        announcement.textContent = message;
+        
+        document.body.appendChild(announcement);
+        
+        // Remove after announcement
+        setTimeout(() => {
+            document.body.removeChild(announcement);
+        }, 1000);
+    }
+    
+    focusNextFileItem(currentItem) {
+        const gitFiles = document.getElementById('git-files');
+        if (!gitFiles) return;
+        
+        const fileItems = Array.from(gitFiles.querySelectorAll('.git-file-item'));
+        const currentIndex = fileItems.indexOf(currentItem);
+        const nextIndex = (currentIndex + 1) % fileItems.length;
+        
+        if (fileItems[nextIndex]) {
+            fileItems[nextIndex].focus();
+        }
+    }
+    
+    focusPreviousFileItem(currentItem) {
+        const gitFiles = document.getElementById('git-files');
+        if (!gitFiles) return;
+        
+        const fileItems = Array.from(gitFiles.querySelectorAll('.git-file-item'));
+        const currentIndex = fileItems.indexOf(currentItem);
+        const prevIndex = currentIndex === 0 ? fileItems.length - 1 : currentIndex - 1;
+        
+        if (fileItems[prevIndex]) {
+            fileItems[prevIndex].focus();
+        }
+    }
+
+    // Animation helpers
+    animateFileOperation(filePath, animationType) {
+        const gitFiles = document.getElementById('git-files');
+        if (!gitFiles) return;
+        
+        const fileItems = gitFiles.querySelectorAll('.git-file-item');
+        fileItems.forEach(item => {
+            const pathElement = item.querySelector('.git-file-path');
+            if (pathElement && pathElement.textContent === filePath) {
+                item.classList.add(animationType);
+            }
+        });
+    }
+    
+    clearFileAnimation(filePath, animationType) {
+        const gitFiles = document.getElementById('git-files');
+        if (!gitFiles) return;
+        
+        const fileItems = gitFiles.querySelectorAll('.git-file-item');
+        fileItems.forEach(item => {
+            const pathElement = item.querySelector('.git-file-path');
+            if (pathElement && pathElement.textContent === filePath) {
+                item.classList.remove(animationType);
+            }
+        });
+    }
+
+    // Performance Monitoring
+    trackPerformance(operation, duration) {
+        if (!this.performanceMetrics) {
+            this.performanceMetrics = {};
+        }
+        
+        if (!this.performanceMetrics[operation]) {
+            this.performanceMetrics[operation] = [];
+        }
+        
+        this.performanceMetrics[operation].push(duration);
+        
+        // Keep only last 10 measurements
+        if (this.performanceMetrics[operation].length > 10) {
+            this.performanceMetrics[operation].shift();
+        }
+        
+        // Log slow operations
+        if (duration > 1000) {
+            console.warn(`Slow git operation: ${operation} took ${duration}ms`);
+        }
+    }
+    
+    getPerformanceStats() {
+        if (!this.performanceMetrics) return {};
+        
+        const stats = {};
+        for (const [operation, times] of Object.entries(this.performanceMetrics)) {
+            const avg = times.reduce((a, b) => a + b, 0) / times.length;
+            const max = Math.max(...times);
+            const min = Math.min(...times);
+            
+            stats[operation] = {
+                average: Math.round(avg),
+                max: Math.round(max),
+                min: Math.round(min),
+                count: times.length
+            };
+        }
+        
+        return stats;
+    }
+
+    togglePerformanceDashboard() {
+        const dashboard = document.getElementById('performance-dashboard');
+        if (!dashboard) return;
+        
+        if (dashboard.classList.contains('visible')) {
+            dashboard.classList.remove('visible');
+        } else {
+            this.updatePerformanceDashboard();
+            dashboard.classList.add('visible');
+        }
+    }
+
+    updatePerformanceDashboard() {
+        const metricsContainer = document.getElementById('performance-metrics');
+        const performanceIndicator = document.getElementById('performance-indicator');
+        const performanceStatus = document.getElementById('performance-status');
+        
+        if (!metricsContainer) return;
+        
+        const stats = this.getPerformanceStats();
+        metricsContainer.innerHTML = '';
+        
+        if (Object.keys(stats).length === 0) {
+            metricsContainer.innerHTML = '<div class="performance-metric"><div class="metric-name">No Data</div><div class="metric-value">--<span class="metric-unit">ms</span></div></div>';
+            return;
+        }
+        
+        // Calculate overall performance status
+        let overallAvg = 0;
+        let totalOperations = 0;
+        
+        for (const [operation, data] of Object.entries(stats)) {
+            const metricEl = document.createElement('div');
+            metricEl.className = 'performance-metric';
+            
+            const operationName = operation.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase());
+            metricEl.innerHTML = `
+                <div class="metric-name">${operationName}</div>
+                <div class="metric-value">${data.average}<span class="metric-unit">ms</span></div>
+            `;
+            
+            metricsContainer.appendChild(metricEl);
+            
+            overallAvg += data.average * data.count;
+            totalOperations += data.count;
+        }
+        
+        // Update overall status indicator
+        if (totalOperations > 0) {
+            overallAvg = overallAvg / totalOperations;
+            
+            if (performanceIndicator && performanceStatus) {
+                performanceIndicator.className = 'performance-indicator';
+                
+                if (overallAvg < 500) {
+                    performanceIndicator.classList.add('fast');
+                    performanceStatus.textContent = 'Fast';
+                } else if (overallAvg > 1500) {
+                    performanceIndicator.classList.add('slow');
+                    performanceStatus.textContent = 'Slow';
+                } else {
+                    performanceStatus.textContent = 'Normal';
+                }
+            }
+        }
+    }
+}
+
 // Initialize the mobile interface
 const mobileInterface = new MobileInterface();
 
 // Initialize file explorer
 const fileExplorer = new FileExplorer();
+
+// Initialize git changes
+const gitChanges = new GitChanges();

@@ -147,6 +147,90 @@
                     </div>
                 </div>
             </section>
+
+            <!-- Git Changes Section -->
+            <section class="git-changes-section" role="region" aria-labelledby="git-changes-heading">
+                <header class="section-header">
+                    <h2 class="section-title" id="git-changes-heading">
+                        Git Changes
+                        <span class="file-counter" id="git-file-counter" data-count="0" aria-label="Number of changed files">0 files</span>
+                    </h2>
+                    <div class="git-controls" role="toolbar" aria-label="Git operations">
+                        <button class="control-btn" id="refresh-git" data-action="refresh" title="Refresh git status" aria-label="Refresh git status">🔄</button>
+                        <button class="control-btn" id="git-branch-info" data-action="branch" title="Branch information" aria-label="Show branch information">🌿</button>
+                        <button class="control-btn" id="git-search-toggle" data-action="search" title="Search and filter files" aria-label="Search and filter files">🔍</button>
+                        <button class="control-btn" id="git-help-btn" data-action="help" title="Show keyboard shortcuts" aria-label="Show keyboard shortcuts help">❓</button>
+                        <button class="control-btn" id="git-performance-btn" data-action="performance" title="Show performance metrics" aria-label="Show performance metrics dashboard">⚡</button>
+                        <button class="control-btn" id="stage-all-btn" data-action="stage-all" title="Stage all files" aria-label="Stage all changed files">📥</button>
+                        <button class="control-btn" id="unstage-all-btn" data-action="unstage-all" title="Unstage all files" aria-label="Unstage all staged files">📤</button>
+                    </div>
+                    <button class="section-toggle" id="git-toggle" data-expanded="false" aria-label="Toggle git changes section" aria-expanded="false" aria-controls="git-content">
+                        <span class="toggle-icon">▶</span>
+                    </button>
+                </header>
+                
+                <div class="section-content" id="git-content" style="display: none;">
+                    <!-- Branch Info -->
+                    <div class="branch-info" id="branch-info">
+                        <div class="branch-details">
+                            <span class="branch-name" id="branch-name">main</span>
+                            <span class="branch-status" id="branch-status">up to date</span>
+                        </div>
+                        <div class="commit-info" id="commit-info">
+                            <span class="commit-hash" id="commit-hash">#abc123</span>
+                            <span class="commit-message" id="commit-message">Initial commit</span>
+                        </div>
+                    </div>
+
+                    <!-- Performance Dashboard -->
+                    <div class="performance-dashboard" id="performance-dashboard">
+                        <div class="performance-title">
+                            ⚡ Performance Metrics
+                            <span class="performance-indicator" id="performance-indicator">
+                                <span id="performance-status">Normal</span>
+                            </span>
+                        </div>
+                        <div class="performance-metrics" id="performance-metrics">
+                            <!-- Metrics populated by JavaScript -->
+                        </div>
+                    </div>
+
+                    <!-- Git Search and Filter -->
+                    <div class="git-search-container" id="git-search-container" style="display: none;" role="search" aria-label="Git file search and filter">
+                        <div class="search-input-group">
+                            <input type="text" id="git-search-input" placeholder="Search files... (use content:term for content search, regex patterns supported)" class="git-search-input" aria-label="Search git files" aria-describedby="search-help">
+                            <button class="search-clear-btn" id="git-search-clear" title="Clear search" aria-label="Clear search">×</button>
+                        </div>
+                        <div class="filter-controls" role="radiogroup" aria-label="Filter files by status">
+                            <button class="filter-btn" id="filter-all" data-status="all" role="radio" aria-checked="true">All</button>
+                            <button class="filter-btn" id="filter-modified" data-status="modified" role="radio" aria-checked="false">Modified</button>
+                            <button class="filter-btn" id="filter-added" data-status="added" role="radio" aria-checked="false">Added</button>
+                            <button class="filter-btn" id="filter-deleted" data-status="deleted" role="radio" aria-checked="false">Deleted</button>
+                            <button class="filter-btn" id="filter-staged" data-status="staged" role="radio" aria-checked="false">Staged</button>
+                        </div>
+                        <div id="search-help" class="sr-only">Search supports regex patterns and content search with content:keyword syntax</div>
+                    </div>
+
+                    <!-- Git Status Container -->
+                    <div class="git-status-container" aria-live="polite" aria-label="Git file changes">
+                        <div class="git-loading" id="git-loading" style="display: none;" role="status" aria-label="Loading git status">
+                            <div class="loading-spinner"></div>
+                            <span class="loading-text">Loading git status...</span>
+                        </div>
+                        <div class="git-files" id="git-files" role="list" aria-label="Changed files">
+                            <!-- Git file items populated by JavaScript -->
+                        </div>
+                        <div class="git-clean" id="git-clean" style="display: none;" role="status" aria-label="Working tree is clean">
+                            <span class="clean-icon">✅</span>
+                            <span class="clean-text">Working tree clean</span>
+                        </div>
+                        <div class="git-no-results" id="git-no-results" style="display: none;" role="status" aria-label="No search results">
+                            <span class="no-results-icon">🔍</span>
+                            <span class="no-results-text">No files match your search</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </main>
 
         <!-- Status Bar -->
@@ -277,6 +361,86 @@
                         <span class="empty-text">No results found</span>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Diff Viewer Modal -->
+    <div class="modal diff-viewer-modal" id="diff-viewer-modal">
+        <div class="modal-content modal-content--large">
+            <div class="modal-header">
+                <h4 id="diff-file-name">Git Diff</h4>
+                <div class="diff-controls">
+                    <select id="diff-compare-mode" class="compare-select">
+                        <option value="working">Working vs Staged</option>
+                        <option value="staged">Staged vs HEAD</option>
+                        <option value="head">Working vs HEAD</option>
+                        <option value="main">Working vs Main</option>
+                    </select>
+                    <button class="control-btn" id="copy-diff" title="Copy diff">📋</button>
+                    <button class="modal-close" id="close-diff">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="diff-content-container">
+                    <div class="diff-loading" id="diff-loading" style="display: none;">
+                        <div class="loading-spinner"></div>
+                        <span class="loading-text">Loading diff...</span>
+                    </div>
+                    
+                    <!-- Diff Stats -->
+                    <div class="diff-stats" id="diff-stats">
+                        <span class="stat-item additions" id="diff-additions">+0</span>
+                        <span class="stat-item deletions" id="diff-deletions">-0</span>
+                        <span class="stat-item file-type" id="diff-file-type">text</span>
+                    </div>
+                    
+                    <!-- Diff Content -->
+                    <div class="diff-content" id="diff-content">
+                        <div class="diff-lines" id="diff-lines">
+                            <!-- Diff lines populated by JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div class="diff-error" id="diff-error" style="display: none;">
+                        <span class="error-icon">⚠️</span>
+                        <span class="error-text">Failed to load diff</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="diff-info">
+                    <span class="file-path" id="diff-file-path">--</span>
+                </div>
+                <div class="diff-actions">
+                    <button class="btn btn--secondary" id="view-file-btn">View File</button>
+                    <button class="btn btn--primary" id="add-to-queue-btn">Add to Queue</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Git Action Confirmation Modal -->
+    <div class="modal git-confirm-modal" id="git-confirm-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 id="git-confirm-title">Confirm Action</h4>
+                <button class="modal-close" id="close-git-confirm">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="confirm-content">
+                    <div class="confirm-icon" id="git-confirm-icon">⚠️</div>
+                    <div class="confirm-message" id="git-confirm-message">
+                        Are you sure you want to perform this action?
+                    </div>
+                    <div class="confirm-details" id="git-confirm-details">
+                        This action cannot be undone.
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn--secondary" id="cancel-git-action">Cancel</button>
+                <button class="btn btn--danger" id="confirm-git-action">Confirm</button>
             </div>
         </div>
     </div>
