@@ -14,13 +14,11 @@ export async function getGitStatus(): Promise<GitStatusResult> {
         throw new GitSecurityError('Not a git repository');
     }
 
-    const [branchInfo, files] = await Promise.all([
-        getBranchInfo(workspaceRoot),
-        getStatusFiles(workspaceRoot)
-    ]);
+    // Only get uncommitted files - no branch info needed for simplified interface
+    const files = await getStatusFiles(workspaceRoot);
 
     return {
-        branch: branchInfo,
+        branch: null, // Simplified - don't return branch info
         files,
         isClean: files.length === 0
     };
@@ -70,6 +68,8 @@ async function getStatusFiles(workspaceRoot: string): Promise<GitFileStatus[]> {
 
     const files: GitFileStatus[] = [];
     const entries = statusOutput.split('\0').filter(entry => entry.length > 0);
+    const fs = await import('fs');
+    const path = await import('path');
 
     for (const entry of entries) {
         if (entry.length < 3) continue;
@@ -86,6 +86,16 @@ async function getStatusFiles(workspaceRoot: string): Promise<GitFileStatus[]> {
             const parts = filePath.split(' -> ');
             oldPath = parts[0];
             actualPath = parts[1];
+        }
+
+        // Skip folders - only show files
+        try {
+            const fullPath = path.resolve(workspaceRoot, actualPath);
+            if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) {
+                continue; // Skip directories
+            }
+        } catch (error) {
+            // If we can't check, assume it's a file and include it
         }
 
         const status = getFileStatus(indexStatus, workingStatus);

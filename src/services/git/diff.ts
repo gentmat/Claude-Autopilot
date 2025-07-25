@@ -14,13 +14,55 @@ export async function getFileDiff(filePath: string, compareMode: GitCompareMode 
         throw new GitSecurityError('Not a git repository');
     }
 
-    const resolvedPath = resolveAndValidatePath(workspaceRoot, filePath);
+    // Use the original filePath as the relative path (it should already be relative)
+    const relativePath = filePath.replace(/^\/+/, '');
+    
+    // Validate the resolved absolute path for security
+    const resolvedPath = resolveAndValidatePath(workspaceRoot, relativePath);
     
     if (!validateFileSize(resolvedPath)) {
         throw new GitSecurityError('File too large for diff operation');
     }
-
-    const relativePath = filePath.replace(/^\/+/, '');
+    
+    // Check if the file is untracked first
+    try {
+        const statusOutput = await executeGitCommand(['status', '--porcelain', '--', relativePath], workspaceRoot);
+        if (statusOutput.startsWith('??')) {
+            // Untracked file - show the entire file content as new
+            const fs = await import('fs/promises');
+            try {
+                const content = await fs.readFile(resolvedPath, 'utf-8');
+                const lines = content.split('\n');
+                const diffLines: GitDiffLine[] = [
+                    { type: 'header', content: `+++ ${relativePath}` }
+                ];
+                
+                let lineNumber = 1;
+                for (const line of lines) {
+                    diffLines.push({
+                        type: 'addition',
+                        newLineNumber: lineNumber++,
+                        content: line
+                    });
+                }
+                
+                return {
+                    filePath: relativePath,
+                    oldPath: undefined,
+                    isNew: true,
+                    isDeleted: false,
+                    isBinary: false,
+                    additions: lines.length,
+                    deletions: 0,
+                    lines: diffLines
+                };
+            } catch (err) {
+                console.error('Error reading untracked file:', err);
+            }
+        }
+    } catch (err) {
+        console.error('Error checking file status:', err);
+    }
     
     let diffArgs: string[];
     switch (compareMode) {
@@ -41,7 +83,8 @@ export async function getFileDiff(filePath: string, compareMode: GitCompareMode 
             break;
         case 'working':
         default:
-            diffArgs = ['diff', '--', relativePath];
+            // Compare working directory against HEAD (shows uncommitted changes)
+            diffArgs = ['diff', 'HEAD', '--', relativePath];
             break;
     }
 
@@ -51,6 +94,27 @@ export async function getFileDiff(filePath: string, compareMode: GitCompareMode 
 }
 
 function parseDiffOutput(diffOutput: string, filePath: string): GitDiffResult {
+    // Debug: log the raw diff output
+    console.log('Git diff output for', filePath, ':', diffOutput);
+    
+    // If no diff output, this might be a new untracked file
+    if (!diffOutput.trim()) {
+        console.log('No diff output - might be untracked file');
+        return {
+            filePath,
+            oldPath: undefined,
+            isNew: true,
+            isDeleted: false,
+            isBinary: false,
+            additions: 0,
+            deletions: 0,
+            lines: [{
+                type: 'header',
+                content: 'New untracked file'
+            }]
+        };
+    }
+    
     const lines = diffOutput.split('\n');
     const diffLines: GitDiffLine[] = [];
     

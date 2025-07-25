@@ -21,7 +21,7 @@ export interface GitBranchInfo {
 }
 
 export interface GitStatusResult {
-    branch: GitBranchInfo;
+    branch: GitBranchInfo | null; // Simplified - branch info is optional
     files: GitFileStatus[];
     isClean: boolean;
 }
