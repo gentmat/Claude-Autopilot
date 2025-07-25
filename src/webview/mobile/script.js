@@ -278,7 +278,8 @@ class MobileInterface {
         
         startBtn.disabled = status.isRunning && status.processingQueue;
         stopBtn.disabled = !status.isRunning && !status.processingQueue;
-        interruptBtn.disabled = !status.sessionReady; // Only enabled when Claude session is ready
+        // Interrupt should be enabled when Claude process is running, even if not fully ready
+        interruptBtn.disabled = !status.isRunning;
         resetBtn.disabled = false;
     }
 
@@ -1148,5 +1149,622 @@ if ('serviceWorker' in navigator) {
     });
 }
 
+// ===== FILE EXPLORER CLASS =====
+
+class FileExplorer {
+    constructor() {
+        console.log('🚀 FileExplorer: Initializing...');
+        this.expandedFolders = new Set();
+        this.fileTree = null;
+        this.currentPath = '';
+        this.isLoading = false;
+        
+        // Cache for performance
+        this.treeCache = new Map();
+        this.contentCache = new Map();
+        
+        console.log('🚀 FileExplorer: Setting up event listeners...');
+        this.initializeEventListeners();
+        
+        console.log('🚀 FileExplorer: Initialized (file tree will load when expanded)');
+    }
+
+    initializeEventListeners() {
+        // Explorer toggle
+        const explorerToggle = document.getElementById('explorer-toggle');
+        if (explorerToggle) {
+            explorerToggle.addEventListener('click', () => this.toggleExplorer());
+        }
+
+        // Control buttons
+        const refreshBtn = document.getElementById('refresh-files');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => this.refreshFileTree());
+        }
+
+        const searchBtn = document.getElementById('search-files');
+        if (searchBtn) {
+            searchBtn.addEventListener('click', () => this.openSearch());
+        }
+
+        // File preview modal
+        const closePreview = document.getElementById('close-preview');
+        if (closePreview) {
+            closePreview.addEventListener('click', () => this.closePreview());
+        }
+
+        const copyPath = document.getElementById('copy-file-path');
+        if (copyPath) {
+            copyPath.addEventListener('click', () => this.copyCurrentFilePath());
+        }
+
+        // Search modal
+        const closeSearch = document.getElementById('close-search');
+        if (closeSearch) {
+            closeSearch.addEventListener('click', () => this.closeSearch());
+        }
+
+        const performSearch = document.getElementById('perform-search');
+        if (performSearch) {
+            performSearch.addEventListener('click', () => this.performSearch());
+        }
+
+        const searchInput = document.getElementById('search-input');
+        if (searchInput) {
+            searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.performSearch();
+                }
+            });
+        }
+
+        // Modal backdrop clicks
+        const previewModal = document.getElementById('file-preview-modal');
+        if (previewModal) {
+            previewModal.addEventListener('click', (e) => {
+                if (e.target === previewModal) {
+                    this.closePreview();
+                }
+            });
+        }
+
+        const searchModal = document.getElementById('file-search-modal');
+        if (searchModal) {
+            searchModal.addEventListener('click', (e) => {
+                if (e.target === searchModal) {
+                    this.closeSearch();
+                }
+            });
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.closePreview();
+                this.closeSearch();
+            }
+        });
+    }
+
+    toggleExplorer() {
+        const content = document.getElementById('explorer-content');
+        const toggle = document.getElementById('explorer-toggle');
+        const toggleIcon = toggle?.querySelector('.toggle-icon');
+        
+        if (!content || !toggle) return;
+        
+        const isExpanded = toggle.getAttribute('data-expanded') === 'true';
+        
+        if (isExpanded) {
+            content.style.display = 'none';
+            toggle.setAttribute('data-expanded', 'false');
+            if (toggleIcon) toggleIcon.textContent = '▶';
+        } else {
+            content.style.display = 'block';
+            toggle.setAttribute('data-expanded', 'true');
+            if (toggleIcon) toggleIcon.textContent = '▼';
+            
+            // Load file tree if not already loaded
+            if (!this.fileTree) {
+                this.loadFileTree();
+            }
+        }
+    }
+
+    async loadFileTree(path = '') {
+        console.log('🌳 FileExplorer: Loading file tree for path:', path);
+        
+        if (this.isLoading) {
+            console.log('🌳 FileExplorer: Already loading, skipping');
+            return;
+        }
+        
+        this.isLoading = true;
+        this.showLoading(true);
+        
+        try {
+            // Check cache first
+            const cacheKey = path || 'root';
+            if (this.treeCache.has(cacheKey)) {
+                console.log('🌳 FileExplorer: Using cached data for', cacheKey);
+                const cachedData = this.treeCache.get(cacheKey);
+                this.renderFileTree(cachedData.items);
+                this.updateFileCounter(cachedData.total);
+                this.showLoading(false);
+                this.isLoading = false;
+                return;
+            }
+
+            const url = `/api/files/tree?path=${encodeURIComponent(path)}&maxDepth=3`;
+            console.log('🌳 FileExplorer: Fetching from URL:', url);
+            console.log('🌳 FileExplorer: Auth token:', window.CLAUDE_AUTH_TOKEN ? 'Present' : 'Missing');
+            console.log('🌳 FileExplorer: Session token:', this.getSessionToken() || 'Missing');
+
+            const response = await fetch(url, {
+                headers: { 
+                    'Authorization': `Bearer ${window.CLAUDE_AUTH_TOKEN}`,
+                    'x-session-token': this.getSessionToken()
+                }
+            });
+
+            console.log('🌳 FileExplorer: Response status:', response.status);
+            console.log('🌳 FileExplorer: Response ok:', response.ok);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('🌳 FileExplorer: Error response:', errorText);
+                throw new Error(`Failed to load file tree: ${response.status} - ${errorText}`);
+            }
+
+            const data = await response.json();
+            console.log('🌳 FileExplorer: Received data:', data);
+            
+            // Cache the result
+            this.treeCache.set(cacheKey, data);
+            
+            this.fileTree = data.items;
+            this.currentPath = path;
+            console.log('🌳 FileExplorer: Rendering', data.items?.length || 0, 'items');
+            this.renderFileTree(data.items);
+            this.updateFileCounter(data.total);
+            
+        } catch (error) {
+            console.error('🌳 FileExplorer: Error loading file tree:', error);
+            this.showError('Failed to load file tree: ' + error.message);
+        } finally {
+            this.showLoading(false);
+            this.isLoading = false;
+        }
+    }
+
+    renderFileTree(items, container = null, level = 0) {
+        console.log('🎨 FileExplorer: Rendering file tree with', items?.length || 0, 'items at level', level);
+        
+        if (!container) {
+            container = document.getElementById('file-tree');
+            if (!container) {
+                console.error('🎨 FileExplorer: file-tree container not found!');
+                return;
+            }
+            container.innerHTML = '';
+            console.log('🎨 FileExplorer: Cleared container, found element:', container);
+        }
+
+        if (!items || items.length === 0) {
+            console.log('🎨 FileExplorer: No items to render, showing empty state');
+            this.showEmptyState();
+            return;
+        }
+
+        console.log('🎨 FileExplorer: Hiding empty state and rendering items');
+        this.hideEmptyState();
+
+        items.forEach((item, index) => {
+            console.log(`🎨 FileExplorer: Rendering item ${index + 1}:`, item.name, item.type);
+            const fileItem = this.createFileItem(item, level);
+            container.appendChild(fileItem);
+
+            if (item.type === 'directory' && item.children && this.expandedFolders.has(item.path)) {
+                this.renderFileTree(item.children, container, level + 1);
+            }
+        });
+        
+        console.log('🎨 FileExplorer: Finished rendering, container has', container.children.length, 'children');
+    }
+
+    createFileItem(item, level) {
+        const div = document.createElement('div');
+        div.className = `file-item ${item.type}`;
+        div.setAttribute('data-path', item.path);
+        div.setAttribute('data-type', item.type);
+
+        const indent = document.createElement('div');
+        indent.className = 'file-indent';
+        indent.style.width = `${level * 20}px`;
+
+        const expand = document.createElement('div');
+        expand.className = 'file-expand';
+        if (item.type === 'directory') {
+            expand.textContent = this.expandedFolders.has(item.path) ? '▼' : '▶';
+            expand.classList.toggle('expanded', this.expandedFolders.has(item.path));
+        }
+
+        const icon = document.createElement('div');
+        icon.className = 'file-icon';
+        icon.textContent = this.getFileIcon(item);
+
+        const name = document.createElement('div');
+        name.className = 'file-name';
+        name.textContent = item.name;
+
+        const meta = document.createElement('div');
+        meta.className = 'file-meta';
+        if (item.type === 'file' && item.size !== undefined) {
+            meta.textContent = this.formatFileSize(item.size);
+        }
+
+        div.appendChild(indent);
+        if (item.type === 'directory') {
+            div.appendChild(expand);
+        }
+        div.appendChild(icon);
+        div.appendChild(name);
+        div.appendChild(meta);
+
+        // Event handlers
+        if (item.type === 'directory') {
+            expand.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleFolder(item.path);
+            });
+            
+            div.addEventListener('click', () => {
+                this.toggleFolder(item.path);
+            });
+        } else {
+            div.addEventListener('click', () => {
+                this.previewFile(item.path);
+            });
+        }
+
+        return div;
+    }
+
+    toggleFolder(folderPath) {
+        if (this.expandedFolders.has(folderPath)) {
+            this.expandedFolders.delete(folderPath);
+        } else {
+            this.expandedFolders.add(folderPath);
+        }
+        
+        // Re-render the tree to show/hide children
+        this.renderFileTree(this.fileTree);
+    }
+
+    getFileIcon(item) {
+        if (item.type === 'directory') {
+            return this.expandedFolders.has(item.path) ? '📂' : '📁';
+        }
+        
+        const icons = {
+            '.js': '🟨', '.jsx': '🟨', '.ts': '🔷', '.tsx': '🔷',
+            '.json': '📄', '.md': '📝', '.css': '🎨', '.scss': '🎨',
+            '.html': '🌐', '.htm': '🌐', '.py': '🐍', '.java': '☕',
+            '.cpp': '⚙️', '.c': '⚙️', '.h': '⚙️', '.hpp': '⚙️',
+            '.sh': '📜', '.bash': '📜', '.zsh': '📜',
+            '.yml': '⚙️', '.yaml': '⚙️', '.xml': '📄',
+            '.svg': '🖼️', '.png': '🖼️', '.jpg': '🖼️', '.jpeg': '🖼️',
+            '.gif': '🖼️', '.pdf': '📕', '.txt': '📄', '.log': '📄',
+            '.env': '⚙️', '.gitignore': '📄', '.dockerfile': '🐳'
+        };
+        
+        return icons[item.extension] || '📄';
+    }
+
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    async previewFile(filePath) {
+        if (!filePath) return;
+        
+        this.currentFilePath = filePath;
+        this.showPreviewModal();
+        this.showPreviewLoading(true);
+        
+        try {
+            // Check cache first
+            if (this.contentCache.has(filePath)) {
+                const cachedContent = this.contentCache.get(filePath);
+                this.displayFileContent(cachedContent);
+                this.showPreviewLoading(false);
+                return;
+            }
+
+            const response = await fetch(`/api/files/content?path=${encodeURIComponent(filePath)}`, {
+                headers: { 
+                    'Authorization': `Bearer ${window.CLAUDE_AUTH_TOKEN}`,
+                    'x-session-token': this.getSessionToken()
+                }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            
+            // Cache the content
+            this.contentCache.set(filePath, data);
+            
+            this.displayFileContent(data);
+            
+        } catch (error) {
+            console.error('Error loading file content:', error);
+            this.showPreviewError(error.message);
+        } finally {
+            this.showPreviewLoading(false);
+        }
+    }
+
+    displayFileContent(data) {
+        const nameElement = document.getElementById('preview-file-name');
+        const sizeElement = document.getElementById('preview-file-size');
+        const linesElement = document.getElementById('preview-file-lines');
+        const modifiedElement = document.getElementById('preview-file-modified');
+        const codeElement = document.getElementById('preview-code-content');
+
+        if (nameElement) {
+            const fileName = this.currentFilePath.split('/').pop();
+            nameElement.textContent = fileName || 'Unknown File';
+        }
+
+        if (sizeElement) {
+            sizeElement.textContent = this.formatFileSize(data.size);
+        }
+
+        if (linesElement) {
+            linesElement.textContent = `${data.lines} lines`;
+        }
+
+        if (modifiedElement) {
+            const date = new Date(data.modified).toLocaleDateString();
+            modifiedElement.textContent = `Modified: ${date}`;
+        }
+
+        if (codeElement) {
+            codeElement.textContent = data.content;
+            codeElement.className = `language-${data.language}`;
+            
+            // Basic syntax highlighting for common cases
+            this.applySyntaxHighlighting(codeElement, data.language);
+        }
+
+        this.hidePreviewError();
+    }
+
+    applySyntaxHighlighting(element, language) {
+        // Basic syntax highlighting - in production you'd want a proper library
+        const content = element.textContent;
+        let highlightedContent = content;
+
+        // Basic highlighting for common languages
+        if (language === 'javascript' || language === 'typescript') {
+            highlightedContent = content
+                .replace(/\b(const|let|var|function|class|if|else|return|import|export|from|async|await)\b/g, '<span style="color: #569cd6;">$1</span>')
+                .replace(/(['"`])((?:\\.|(?!\1)[^\\])*?)\1/g, '<span style="color: #ce9178;">$&</span>')
+                .replace(/\/\/.*$/gm, '<span style="color: #6a9955;">$&</span>');
+        } else if (language === 'json') {
+            highlightedContent = content
+                .replace(/("([^"\\]|\\.)*")(\s*:)/g, '<span style="color: #9cdcfe;">$1</span>$3')
+                .replace(/:\s*("([^"\\]|\\.)*")/g, ': <span style="color: #ce9178;">$1</span>')
+                .replace(/:\s*(\d+)/g, ': <span style="color: #b5cea8;">$1</span>');
+        }
+
+        element.innerHTML = highlightedContent;
+    }
+
+    // Modal and UI management methods
+    showPreviewModal() {
+        const modal = document.getElementById('file-preview-modal');
+        if (modal) {
+            modal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+    }
+
+    closePreview() {
+        const modal = document.getElementById('file-preview-modal');
+        if (modal) {
+            modal.style.display = 'none';
+            document.body.style.overflow = '';
+        }
+    }
+
+    showPreviewLoading(show) {
+        const loading = document.getElementById('preview-loading');
+        const content = document.getElementById('preview-content');
+        if (loading && content) {
+            loading.style.display = show ? 'flex' : 'none';
+            content.style.display = show ? 'none' : 'block';
+        }
+    }
+
+    showPreviewError(message) {
+        const error = document.getElementById('preview-error');
+        const content = document.getElementById('preview-content');
+        if (error && content) {
+            error.style.display = 'flex';
+            error.querySelector('.error-text').textContent = message;
+            content.style.display = 'none';
+        }
+    }
+
+    hidePreviewError() {
+        const error = document.getElementById('preview-error');
+        if (error) {
+            error.style.display = 'none';
+        }
+    }
+
+    copyCurrentFilePath() {
+        if (this.currentFilePath && navigator.clipboard) {
+            navigator.clipboard.writeText(this.currentFilePath).then(() => {
+                this.showToast('File path copied to clipboard');
+            }).catch(() => {
+                this.showToast('Failed to copy file path');
+            });
+        }
+    }
+
+    // Search functionality
+    openSearch() {
+        const modal = document.getElementById('file-search-modal');
+        const input = document.getElementById('search-input');
+        if (modal) {
+            modal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+            if (input) {
+                setTimeout(() => input.focus(), 100);
+            }
+        }
+    }
+
+    closeSearch() {
+        const modal = document.getElementById('file-search-modal');
+        if (modal) {
+            modal.style.display = 'none';
+            document.body.style.overflow = '';
+        }
+    }
+
+    async performSearch() {
+        const input = document.getElementById('search-input');
+        const extensions = document.getElementById('search-extensions');
+        
+        if (!input) return;
+        
+        const query = input.value.trim();
+        if (!query) return;
+        
+        const selectedExtensions = extensions?.value || '';
+        
+        this.showSearchLoading(true);
+        
+        // For now, show a placeholder - full search implementation would go here
+        setTimeout(() => {
+            this.showSearchLoading(false);
+            this.showSearchResults([]);
+        }, 1000);
+    }
+
+    showSearchLoading(show) {
+        const loading = document.getElementById('search-loading');
+        const results = document.getElementById('search-results');
+        if (loading && results) {
+            loading.style.display = show ? 'flex' : 'none';
+            results.style.display = show ? 'none' : 'block';
+        }
+    }
+
+    showSearchResults(results) {
+        const container = document.getElementById('search-results');
+        const empty = document.getElementById('search-empty');
+        
+        if (!container) return;
+        
+        if (results.length === 0) {
+            container.style.display = 'none';
+            if (empty) empty.style.display = 'flex';
+            return;
+        }
+        
+        if (empty) empty.style.display = 'none';
+        container.style.display = 'block';
+        container.innerHTML = '';
+        
+        results.forEach(result => {
+            const item = this.createSearchResultItem(result);
+            container.appendChild(item);
+        });
+    }
+
+    // Utility methods
+    refreshFileTree() {
+        this.treeCache.clear();
+        this.contentCache.clear();
+        this.loadFileTree(this.currentPath);
+    }
+
+    showLoading(show) {
+        const loading = document.getElementById('file-tree-loading');
+        const tree = document.getElementById('file-tree');
+        if (loading && tree) {
+            loading.style.display = show ? 'flex' : 'none';
+            tree.style.display = show ? 'none' : 'block';
+        }
+    }
+
+    showEmptyState() {
+        const empty = document.getElementById('file-tree-empty');
+        const tree = document.getElementById('file-tree');
+        if (empty && tree) {
+            empty.style.display = 'flex';
+            tree.style.display = 'none';
+        }
+    }
+
+    hideEmptyState() {
+        const empty = document.getElementById('file-tree-empty');
+        const tree = document.getElementById('file-tree');
+        if (empty && tree) {
+            empty.style.display = 'none';
+            tree.style.display = 'block';
+        }
+    }
+
+    showError(message) {
+        console.error('FileExplorer Error:', message);
+        this.showToast(message);
+    }
+
+    updateFileCounter(count) {
+        const counter = document.getElementById('file-counter');
+        if (counter) {
+            counter.textContent = `${count} files`;
+            counter.setAttribute('data-count', count);
+        }
+    }
+
+    getSessionToken() {
+        // Get session token from cookie or localStorage
+        const cookies = document.cookie.split(';');
+        for (const cookie of cookies) {
+            const [name, value] = cookie.trim().split('=');
+            if (name === 'sessionToken') {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    showToast(message) {
+        // Use existing toast system if available
+        if (window.showToast) {
+            window.showToast(message);
+        } else {
+            console.log('Toast:', message);
+        }
+    }
+}
+
 // Initialize the mobile interface
 const mobileInterface = new MobileInterface();
+
+// Initialize file explorer
+const fileExplorer = new FileExplorer();

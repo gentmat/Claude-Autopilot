@@ -28,11 +28,22 @@ export function duplicateMessageInQueue(messageId: string): void {
             status: 'pending'
         };
         
-        const originalIndex = messageQueue.findIndex(msg => msg.id === messageId);
-        messageQueue.splice(originalIndex + 1, 0, duplicatedMessage);
+        // Smart insertion based on original message status
+        if (message.status === 'completed') {
+            // If duplicating a completed message, add at end of queue (after last pending)
+            messageQueue.push(duplicatedMessage);
+        } else {
+            // If duplicating a processing/pending message, add after original
+            const originalIndex = messageQueue.findIndex(msg => msg.id === messageId);
+            messageQueue.splice(originalIndex + 1, 0, duplicatedMessage);
+        }
         
         updateWebviewContent();
         savePendingQueue(); // Save queue changes
+        
+        // Try to auto-start processing if conditions are met
+        tryAutoStartProcessing();
+        
         vscode.window.showInformationMessage(`Message duplicated: ${message.text.substring(0, 50)}...`);
     }
 }

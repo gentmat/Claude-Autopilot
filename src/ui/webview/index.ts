@@ -32,7 +32,7 @@ export function updateSessionState(): void {
     }
 }
 
-export function getWebviewContent(context: vscode.ExtensionContext): string {
+export function getWebviewContent(context: vscode.ExtensionContext, webview?: vscode.Webview): string {
     const htmlPath = path.join(context.extensionPath, 'out', 'webview', 'index.html');
     const cssPath = path.join(context.extensionPath, 'out', 'webview', 'styles.css');
     const jsPath = path.join(context.extensionPath, 'out', 'webview', 'script.js');
@@ -40,11 +40,35 @@ export function getWebviewContent(context: vscode.ExtensionContext): string {
     try {
         let html = fs.readFileSync(htmlPath, 'utf8');
         
-        const cssUri = claudePanel?.webview.asWebviewUri(vscode.Uri.file(cssPath));
-        const jsUri = claudePanel?.webview.asWebviewUri(vscode.Uri.file(jsPath));
+        // Use the passed webview or fall back to claudePanel
+        const activeWebview = webview || claudePanel?.webview;
+        if (!activeWebview) {
+            debugLog('❌ No webview available for URI generation');
+            throw new Error('No webview available');
+        }
         
+        const cssUri = activeWebview.asWebviewUri(vscode.Uri.file(cssPath));
+        const jsUri = activeWebview.asWebviewUri(vscode.Uri.file(jsPath));
+        
+        // Verify files exist before replacement
+        if (!fs.existsSync(cssPath)) {
+            debugLog(`❌ CSS file not found: ${cssPath}`);
+        }
+        if (!fs.existsSync(jsPath)) {
+            debugLog(`❌ JS file not found: ${jsPath}`);
+        }
+        
+        // Perform replacements
+        const originalHtml = html;
         html = html.replace('href="styles.css"', `href="${cssUri}"`);
         html = html.replace('src="script.js"', `src="${jsUri}"`);
+        
+        // Verify replacements worked
+        if (html === originalHtml) {
+            debugLog(`⚠️ No replacements made in HTML - check file references`);
+        } else {
+            debugLog(`✅ Webview URIs generated successfully`);
+        }
         
         return html;
     } catch (error) {

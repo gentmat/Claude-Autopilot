@@ -458,6 +458,109 @@ export class MobileServer {
             });
         });
 
+        // File Explorer API Endpoints
+        this.app.get('/api/files/tree', (req: Request, res: Response) => {
+            try {
+                const requestPath = req.query.path as string || '';
+                const maxDepth = Math.min(parseInt(req.query.maxDepth as string) || 3, 5); // Max 5 levels for performance
+                
+                // Security: Validate and sanitize path
+                const workspaceRoot = this.getWorkspaceRoot();
+                if (!workspaceRoot) {
+                    return res.status(400).json({ error: 'No workspace available' });
+                }
+                
+                const resolvedPath = this.validateAndResolvePath(workspaceRoot, requestPath);
+                if (!resolvedPath) {
+                    return res.status(403).json({ error: 'Invalid path or access denied' });
+                }
+                
+                const items = this.buildFileTree(resolvedPath, maxDepth, 0);
+                
+                res.json({
+                    items,
+                    path: requestPath,
+                    total: this.countItems(items)
+                });
+                
+            } catch (error) {
+                console.error('Error building file tree:', error);
+                res.status(500).json({ error: 'Failed to load file tree' });
+            }
+        });
+
+        this.app.get('/api/files/content', (req: Request, res: Response) => {
+            try {
+                const filePath = req.query.path as string;
+                if (!filePath) {
+                    return res.status(400).json({ error: 'File path is required' });
+                }
+                
+                // Security: Validate and sanitize path
+                const workspaceRoot = this.getWorkspaceRoot();
+                if (!workspaceRoot) {
+                    return res.status(400).json({ error: 'No workspace available' });
+                }
+                
+                const resolvedPath = this.validateAndResolvePath(workspaceRoot, filePath);
+                if (!resolvedPath) {
+                    return res.status(403).json({ error: 'Invalid path or access denied' });
+                }
+                
+                // Check if file exists and is actually a file
+                if (!fs.existsSync(resolvedPath)) {
+                    return res.status(404).json({ error: 'File not found' });
+                }
+                
+                const stats = fs.statSync(resolvedPath);
+                if (!stats.isFile()) {
+                    return res.status(400).json({ error: 'Path is not a file' });
+                }
+                
+                // Security: File size limit (100KB)
+                const maxFileSize = 100 * 1024;
+                if (stats.size > maxFileSize) {
+                    return res.status(413).json({ 
+                        error: 'File too large for preview',
+                        maxSize: maxFileSize,
+                        actualSize: stats.size
+                    });
+                }
+                
+                // Check if file is binary
+                if (this.isBinaryFile(resolvedPath)) {
+                    return res.status(415).json({ error: 'Binary files are not supported for preview' });
+                }
+                
+                let content = fs.readFileSync(resolvedPath, 'utf8');
+                const lines = content.split('\n');
+                const maxLines = 1000;
+                let truncated = false;
+                
+                if (lines.length > maxLines) {
+                    content = lines.slice(0, maxLines).join('\n');
+                    truncated = true;
+                }
+                
+                const extension = path.extname(resolvedPath).toLowerCase();
+                const language = this.getLanguageFromExtension(extension);
+                
+                res.json({
+                    content,
+                    language,
+                    size: stats.size,
+                    lines: lines.length,
+                    truncated,
+                    modified: stats.mtime.toISOString(),
+                    extension
+                });
+                
+            } catch (error) {
+                console.error('Error reading file content:', error);
+                res.status(500).json({ error: 'Failed to read file content' });
+            }
+        });
+
         // Login endpoint for password authentication
         this.app.post('/api/auth/login', (req: Request, res: Response) => {
             // Validate token first (since it's excluded from the main middleware)
@@ -777,6 +880,190 @@ export class MobileServer {
 
     public isRunning(): boolean {
         return this.isServerRunning;
+    }
+
+    // File Explorer Utility Methods
+    private getWorkspaceRoot(): string | null {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        return workspaceFolder ? workspaceFolder.uri.fsPath : null;
+    }
+
+    private validateAndResolvePath(workspaceRoot: string, requestPath: string): string | null {
+        try {
+            // Remove leading slash and normalize
+            const cleanPath = requestPath.replace(/^\/+/, '').replace(/\.\./g, '');
+            const fullPath = path.resolve(workspaceRoot, cleanPath);
+            
+            // Security: Ensure path is within workspace
+            if (!fullPath.startsWith(path.resolve(workspaceRoot))) {
+                return null;
+            }
+            
+            return fullPath;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    private buildFileTree(dirPath: string, maxDepth: number, currentDepth: number): any[] {
+        if (currentDepth >= maxDepth) {
+            return [];
+        }
+
+        const items: any[] = [];
+        const ignorePatterns = [
+            '.git', '.vscode', 'node_modules', '.DS_Store', 'Thumbs.db',
+            '.gitignore', '.vscodeignore', 'out', 'dist', 'build', '.cache',
+            '__pycache__', '*.pyc', '.env', '.env.local', '.next', 'coverage'
+        ];
+
+        try {
+            const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+            
+            // Separate directories and files
+            const directories = entries.filter(entry => entry.isDirectory());
+            const files = entries.filter(entry => entry.isFile());
+            
+            // Sort directories first, then files
+            const sortedEntries = [
+                ...directories.sort((a, b) => a.name.localeCompare(b.name)),
+                ...files.sort((a, b) => a.name.localeCompare(b.name))
+            ];
+
+            for (const entry of sortedEntries) {
+                // Skip ignored patterns
+                if (this.shouldIgnoreFile(entry.name, ignorePatterns)) {
+                    continue;
+                }
+
+                const fullPath = path.join(dirPath, entry.name);
+                const stats = fs.statSync(fullPath);
+                const relativePath = path.relative(this.getWorkspaceRoot()!, fullPath);
+
+                if (entry.isDirectory()) {
+                    const item = {
+                        name: entry.name,
+                        type: 'directory',
+                        path: '/' + relativePath.replace(/\\/g, '/'),
+                        children: currentDepth < maxDepth - 1 ? this.buildFileTree(fullPath, maxDepth, currentDepth + 1) : [],
+                        expanded: false,
+                        size: 0,
+                        modified: stats.mtime.toISOString()
+                    };
+                    items.push(item);
+                } else {
+                    const extension = path.extname(entry.name).toLowerCase();
+                    const item = {
+                        name: entry.name,
+                        type: 'file',
+                        path: '/' + relativePath.replace(/\\/g, '/'),
+                        size: stats.size,
+                        modified: stats.mtime.toISOString(),
+                        extension: extension
+                    };
+                    items.push(item);
+                }
+            }
+        } catch (error) {
+            console.error(`Error reading directory ${dirPath}:`, error);
+        }
+
+        return items;
+    }
+
+    private shouldIgnoreFile(filename: string, ignorePatterns: string[]): boolean {
+        for (const pattern of ignorePatterns) {
+            if (pattern.includes('*')) {
+                const regex = new RegExp(pattern.replace(/\*/g, '.*'));
+                if (regex.test(filename)) {
+                    return true;
+                }
+            } else if (filename === pattern) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private countItems(items: any[]): number {
+        let count = items.length;
+        for (const item of items) {
+            if (item.children) {
+                count += this.countItems(item.children);
+            }
+        }
+        return count;
+    }
+
+    private isBinaryFile(filePath: string): boolean {
+        try {
+            const buffer = fs.readFileSync(filePath, { encoding: null });
+            const sampleSize = Math.min(buffer.length, 512);
+            
+            for (let i = 0; i < sampleSize; i++) {
+                const byte = buffer[i];
+                // Check for null bytes (common in binary files) and other non-printable characters
+                if (byte === 0 || (byte < 32 && byte !== 9 && byte !== 10 && byte !== 13)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (error) {
+            return true; // Assume binary if we can't read it
+        }
+    }
+
+    private getLanguageFromExtension(extension: string): string {
+        const languageMap: { [key: string]: string } = {
+            '.js': 'javascript',
+            '.jsx': 'javascript',
+            '.ts': 'typescript',
+            '.tsx': 'typescript',
+            '.py': 'python',
+            '.java': 'java',
+            '.c': 'c',
+            '.cpp': 'cpp',
+            '.cxx': 'cpp',
+            '.cc': 'cpp',
+            '.h': 'c',
+            '.hpp': 'cpp',
+            '.cs': 'csharp',
+            '.php': 'php',
+            '.rb': 'ruby',
+            '.go': 'go',
+            '.rs': 'rust',
+            '.swift': 'swift',
+            '.kt': 'kotlin',
+            '.scala': 'scala',
+            '.html': 'html',
+            '.htm': 'html',
+            '.css': 'css',
+            '.scss': 'scss',
+            '.sass': 'sass',
+            '.less': 'less',
+            '.json': 'json',
+            '.xml': 'xml',
+            '.yaml': 'yaml',
+            '.yml': 'yaml',
+            '.toml': 'toml',
+            '.ini': 'ini',
+            '.cfg': 'ini',
+            '.conf': 'ini',
+            '.sh': 'bash',
+            '.bash': 'bash',
+            '.zsh': 'bash',
+            '.fish': 'bash',
+            '.ps1': 'powershell',
+            '.sql': 'sql',
+            '.md': 'markdown',
+            '.txt': 'text',
+            '.log': 'text',
+            '.dockerfile': 'dockerfile',
+            '.gitignore': 'text',
+            '.env': 'text'
+        };
+        
+        return languageMap[extension] || 'text';
     }
 
     // Method to notify mobile clients of changes

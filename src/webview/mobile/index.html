@@ -114,6 +114,39 @@
                     </div>
                 </div>
             </section>
+
+            <!-- File Explorer Section -->
+            <section class="file-explorer-section">
+                <header class="section-header">
+                    <h2 class="section-title">
+                        File Explorer
+                        <span class="file-counter" id="file-counter" data-count="0">0 files</span>
+                    </h2>
+                    <div class="explorer-controls">
+                        <button class="control-btn" id="refresh-files" data-action="refresh" title="Refresh file tree">🔄</button>
+                        <button class="control-btn" id="search-files" data-action="search" title="Search in files">🔍</button>
+                    </div>
+                    <button class="section-toggle" id="explorer-toggle" data-expanded="false">
+                        <span class="toggle-icon">▶</span>
+                    </button>
+                </header>
+                
+                <div class="section-content" id="explorer-content" style="display: none;">
+                    <div class="file-tree-container">
+                        <div class="file-tree-loading" id="file-tree-loading" style="display: none;">
+                            <div class="loading-spinner"></div>
+                            <span class="loading-text">Loading files...</span>
+                        </div>
+                        <div class="file-tree" id="file-tree">
+                            <!-- File tree items populated by JavaScript -->
+                        </div>
+                        <div class="file-tree-empty" id="file-tree-empty" style="display: none;">
+                            <span class="empty-icon">📂</span>
+                            <span class="empty-text">No files found</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </main>
 
         <!-- Status Bar -->
@@ -166,6 +199,84 @@
             <div class="modal-footer">
                 <button class="btn btn--secondary" id="cancel-edit-message">Cancel</button>
                 <button class="btn btn--primary" id="confirm-edit-message">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Preview Modal -->
+    <div class="modal file-preview-modal" id="file-preview-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 id="preview-file-name">Loading...</h4>
+                <div class="preview-controls">
+                    <button class="control-btn" id="copy-file-path" title="Copy file path">📋</button>
+                    <button class="modal-close" id="close-preview">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="preview-content-container">
+                    <div class="preview-loading" id="preview-loading" style="display: none;">
+                        <div class="loading-spinner"></div>
+                        <span class="loading-text">Loading file content...</span>
+                    </div>
+                    <div class="preview-content" id="preview-content">
+                        <pre><code id="preview-code-content" class="language-text"></code></pre>
+                    </div>
+                    <div class="preview-error" id="preview-error" style="display: none;">
+                        <span class="error-icon">⚠️</span>
+                        <span class="error-text">Failed to load file content</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="file-info">
+                    <span class="file-size" id="preview-file-size">0 KB</span>
+                    <span class="file-separator">•</span>
+                    <span class="file-lines" id="preview-file-lines">0 lines</span>
+                    <span class="file-separator">•</span>
+                    <span class="file-modified" id="preview-file-modified">Modified: --</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Search Modal -->
+    <div class="modal file-search-modal" id="file-search-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Search Files</h3>
+                <button class="modal-close" id="close-search">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="search-form">
+                    <input type="text" id="search-input" placeholder="Search in files..." autocomplete="off">
+                    <div class="search-filters">
+                        <select id="search-extensions">
+                            <option value="">All files</option>
+                            <option value=".ts,.js,.tsx,.jsx">TypeScript/JavaScript</option>
+                            <option value=".py">Python</option>
+                            <option value=".md">Markdown</option>
+                            <option value=".json">JSON</option>
+                            <option value=".css,.scss,.sass">Stylesheets</option>
+                            <option value=".html,.htm">HTML</option>
+                            <option value=".txt,.log">Text/Logs</option>
+                        </select>
+                        <button class="btn btn--primary" id="perform-search">Search</button>
+                    </div>
+                </div>
+                <div class="search-results-container">
+                    <div class="search-loading" id="search-loading" style="display: none;">
+                        <div class="loading-spinner"></div>
+                        <span class="loading-text">Searching...</span>
+                    </div>
+                    <div class="search-results" id="search-results">
+                        <!-- Search results populated by JavaScript -->
+                    </div>
+                    <div class="search-empty" id="search-empty" style="display: none;">
+                        <span class="empty-icon">🔍</span>
+                        <span class="empty-text">No results found</span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

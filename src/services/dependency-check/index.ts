@@ -228,6 +228,107 @@ async function checkCommand(command: string, args: string[]): Promise<Dependency
     });
 }
 
+export async function checkNgrokInstallation(): Promise<DependencyCheckResult> {
+    return new Promise((resolve) => {
+        const process = spawn('ngrok', ['version'], {
+            stdio: ['pipe', 'pipe', 'pipe'],
+            shell: true
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        process.stdout?.on('data', (data) => {
+            stdout += data.toString();
+        });
+
+        process.stderr?.on('data', (data) => {
+            stderr += data.toString();
+        });
+
+        const timeout = setTimeout(() => {
+            process.kill();
+            resolve({
+                available: false,
+                error: 'Command timeout - ngrok may not be installed',
+                installInstructions: getNgrokInstallInstructions()
+            });
+        }, 5000);
+
+        process.on('close', (code) => {
+            clearTimeout(timeout);
+            
+            if (code === 0 && (stdout.trim() || stderr.trim())) {
+                const version = stdout.trim() || stderr.trim();
+                resolve({
+                    available: true,
+                    version: version,
+                    path: 'ngrok'
+                });
+            } else {
+                resolve({
+                    available: false,
+                    error: 'ngrok command failed - ngrok may not be installed correctly',
+                    installInstructions: getNgrokInstallInstructions()
+                });
+            }
+        });
+
+        process.on('error', (err) => {
+            clearTimeout(timeout);
+            resolve({
+                available: false,
+                error: `ngrok not found: ${err.message}`,
+                installInstructions: getNgrokInstallInstructions()
+            });
+        });
+    });
+}
+
+function getNgrokInstallInstructions(): string {
+    const platform = os.platform();
+    
+    switch (platform) {
+        case 'darwin': // macOS
+            return `To install ngrok on macOS:
+1. Visit https://ngrok.com/download
+2. Download the macOS version
+3. Extract the binary to /usr/local/bin/
+   OR
+1. Install via Homebrew: brew install ngrok/ngrok/ngrok
+2. Sign up at https://ngrok.com and get your auth token
+3. Run: ngrok config add-authtoken <your-token>`;
+        
+        case 'win32': // Windows
+            return `To install ngrok on Windows:
+1. Visit https://ngrok.com/download
+2. Download the Windows version
+3. Extract to a folder and add to your PATH
+   OR
+1. Install via Chocolatey: choco install ngrok
+2. Sign up at https://ngrok.com and get your auth token
+3. Run: ngrok config add-authtoken <your-token>`;
+        
+        case 'linux': // Linux
+            return `To install ngrok on Linux:
+1. Visit https://ngrok.com/download
+2. Download the Linux version for your architecture
+3. Extract to /usr/local/bin/ or add to PATH
+   OR
+1. Install via package manager (varies by distribution)
+2. Sign up at https://ngrok.com and get your auth token  
+3. Run: ngrok config add-authtoken <your-token>`;
+        
+        default:
+            return `To install ngrok:
+1. Visit https://ngrok.com/download
+2. Download the version for your platform
+3. Extract and add to your system PATH
+4. Sign up at https://ngrok.com and get your auth token
+5. Run: ngrok config add-authtoken <your-token>`;
+    }
+}
+
 function getClaudeInstallInstructions(): string {
     const platform = os.platform();
     
@@ -301,25 +402,27 @@ export async function runDependencyCheck(): Promise<{
     claude: DependencyCheckResult;
     python: DependencyCheckResult;
     wrapper: DependencyCheckResult;
+    ngrok: DependencyCheckResult;
     allReady: boolean;
 }> {
-    const [claude, python, wrapper] = await Promise.all([
+    const [claude, python, wrapper, ngrok] = await Promise.all([
         checkClaudeInstallation(),
         checkPythonInstallation(),
-        checkPtyWrapperFile()
+        checkPtyWrapperFile(),
+        checkNgrokInstallation()
     ]);
 
-    const allReady = claude.available && python.available && wrapper.available;
+    const allReady = claude.available && python.available && wrapper.available && ngrok.available;
 
-    return { claude, python, wrapper, allReady };
+    return { claude, python, wrapper, ngrok, allReady };
 }
 
 export function showDependencyStatus(results: Awaited<ReturnType<typeof runDependencyCheck>>): void {
-    const { claude, python, wrapper, allReady } = results;
+    const { claude, python, wrapper, ngrok, allReady } = results;
     
     if (allReady) {
         vscode.window.showInformationMessage(
-            `✅ All dependencies ready! Claude: ${claude.version}, Python: ${python.version}`
+            `✅ All dependencies ready! Claude: ${claude.version}, Python: ${python.version}, ngrok: ${ngrok.version}`
         );
         return;
     }
@@ -358,7 +461,7 @@ export function showDependencyStatus(results: Awaited<ReturnType<typeof runDepen
 }
 
 function showInstallationInstructions(results: Awaited<ReturnType<typeof runDependencyCheck>>): void {
-    const { claude, python, wrapper } = results;
+    const { claude, python, wrapper, ngrok } = results;
     
     let instructions = 'Claude Autopilot Installation Requirements:\n\n';
     
@@ -378,6 +481,12 @@ function showInstallationInstructions(results: Awaited<ReturnType<typeof runDepe
         instructions += `🔴 PTY Wrapper Missing:\n${wrapper.installInstructions}\n\n`;
     } else {
         instructions += `✅ PTY Wrapper: Ready\n\n`;
+    }
+    
+    if (!ngrok.available) {
+        instructions += `🔴 ngrok Missing:\n${ngrok.installInstructions}\n\n`;
+    } else {
+        instructions += `✅ ngrok: ${ngrok.version}\n\n`;
     }
     
     instructions += 'After installing dependencies, restart VS Code and try again.';

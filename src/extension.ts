@@ -70,7 +70,7 @@ export function activate(context: vscode.ExtensionContext) {
             setClaudePanel(panel);
 
             // Set webview content
-            panel.webview.html = getWebviewContent(context);
+            panel.webview.html = getWebviewContent(context, panel.webview);
 
             // Handle panel disposal
             panel.onDidDispose(() => {
