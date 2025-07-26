@@ -29,7 +29,7 @@ export async function startClaudeSession(skipPermissions: boolean = true): Promi
 
         // Check dependencies before starting
         debugLog(formatDebugMessage(DebugEmojis.SEARCH, 'Checking dependencies...'));
-        let dependencyResults;
+        let dependencyResults: Awaited<ReturnType<typeof runDependencyCheck>>;
         try {
             dependencyResults = await runDependencyCheck();
         } catch (error) {
@@ -43,9 +43,15 @@ export async function startClaudeSession(skipPermissions: boolean = true): Promi
                         dependencyResults.python.available && 
                         dependencyResults.wrapper.available;
         
+        debugLog(`🔍 Dependency check results:
+  Claude CLI: ${dependencyResults.claude.available ? '✅' : '❌'} ${dependencyResults.claude.available ? dependencyResults.claude.version : dependencyResults.claude.error}
+  Python: ${dependencyResults.python.available ? '✅' : '❌'} ${dependencyResults.python.available ? dependencyResults.python.version : dependencyResults.python.error}
+  PTY Wrapper: ${dependencyResults.wrapper.available ? '✅' : '❌'} ${dependencyResults.wrapper.available ? dependencyResults.wrapper.version : dependencyResults.wrapper.error}`);
+        
         if (!allReady) {
-            debugLog('❌ Dependencies not satisfied, showing status');
+            debugLog('❌ BLOCKING SESSION START - Dependencies not satisfied');
             showDependencyStatus(dependencyResults);
+            debugLog('❌ SESSION START ABORTED - Returning early due to missing dependencies');
             return;
         }
         

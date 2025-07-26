@@ -12,27 +12,40 @@ export function showDependencyStatus(results: DependencyCheckResults): void {
     if (status.allReady) {
         showInfo(status.successMessages[0]);
     } else {
-        vscode.window.showQuickPick([
-            {
-                label: '$(info) Show Installation Instructions',
-                description: 'Get help installing missing dependencies',
-                action: 'instructions'
-            },
-            {
-                label: '$(refresh) Re-check Dependencies',
-                description: 'Run dependency check again',
-                action: 'recheck'
-            }
-        ], {
-            placeHolder: 'Some dependencies are missing or outdated',
-            ignoreFocusOut: true
-        }).then(selection => {
-            if (selection?.action === 'instructions') {
+        // First show error message with dependency file button
+        const errorSummary = status.issues.join('\n');
+        vscode.window.showErrorMessage(
+            `Missing dependencies detected:\n\n${errorSummary}`,
+            'View Dependency Report',
+            'Install Missing Dependencies'
+        ).then(selection => {
+            if (selection === 'View Dependency Report') {
                 showInstallationInstructions(results);
-            } else if (selection?.action === 'recheck') {
-                // Re-run check
-                runDependencyCheck().then(showDependencyStatus, error => {
-                    showErrorFromException(error, 'Dependency check failed');
+            } else if (selection === 'Install Missing Dependencies') {
+                // Show quick pick menu for actions
+                vscode.window.showQuickPick([
+                    {
+                        label: '$(info) Show Installation Instructions',
+                        description: 'Get help installing missing dependencies',
+                        action: 'instructions'
+                    },
+                    {
+                        label: '$(refresh) Re-check Dependencies',
+                        description: 'Run dependency check again',
+                        action: 'recheck'
+                    }
+                ], {
+                    placeHolder: 'Choose an action to resolve dependency issues',
+                    ignoreFocusOut: true
+                }).then(quickPickSelection => {
+                    if (quickPickSelection?.action === 'instructions') {
+                        showInstallationInstructions(results);
+                    } else if (quickPickSelection?.action === 'recheck') {
+                        // Re-run check
+                        runDependencyCheck().then(showDependencyStatus, error => {
+                            showErrorFromException(error, 'Dependency check failed');
+                        });
+                    }
                 });
             }
         });

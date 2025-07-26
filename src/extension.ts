@@ -17,8 +17,10 @@ import { sendSecuritySettings, toggleXssbypassSetting } from './services/securit
 import { getMobileServer } from './services/mobile';
 import { debugLog } from './utils';
 import { showError, showInfo, showWarning, showInput, Messages, showErrorFromException } from './utils/notifications';
+import { runDependencyCheck, showDependencyStatus } from './services/dependency-check/main';
 
 let configWatcher: vscode.Disposable | undefined;
+
 
 export function activate(context: vscode.ExtensionContext) {
     debugLog('🚀 Activating Claude Autopilot Extension');
@@ -29,6 +31,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Initialize configuration
     const config = getValidatedConfig();
     setDebugMode(config.developmentMode);
+
 
     // Show configuration status
     showConfigValidationStatus();
@@ -49,6 +52,36 @@ export function activate(context: vscode.ExtensionContext) {
     const commands = [
         vscode.commands.registerCommand('claude-autopilot.start', async () => {
             debugLog('🚀 Command: claude-autopilot.start');
+
+            // Check dependencies FIRST and block if missing
+            try {
+                debugLog('🔍 Validating Claude session dependencies...');
+                const dependencies = await runDependencyCheck();
+                
+                const missingDeps: string[] = [];
+                if (!dependencies.claude.available) {
+                    missingDeps.push(`• Claude CLI: ${dependencies.claude.error}`);
+                }
+                if (!dependencies.python.available) {
+                    missingDeps.push(`• Python: ${dependencies.python.error}`);
+                }
+                if (!dependencies.wrapper.available) {
+                    missingDeps.push(`• PTY Wrapper: ${dependencies.wrapper.error}`);
+                }
+                
+                if (missingDeps.length > 0) {
+                    debugLog('❌ BLOCKING START - Missing dependencies detected');
+                    showDependencyStatus(dependencies);
+                    return; // BLOCK START
+                }
+                
+                debugLog('✅ All dependencies available, proceeding with start');
+                
+            } catch (error) {
+                debugLog(`❌ Failed to check dependencies: ${error}`);
+                showErrorFromException(error, 'Failed to check dependencies');
+                return; // BLOCK START
+            }
 
             // Check if panel is already open
             if (claudePanel) {
@@ -300,6 +333,30 @@ export function activate(context: vscode.ExtensionContext) {
 
         vscode.commands.registerCommand('claude-autopilot.startWebInterface', async () => {
             debugLog('🚀 Command: claude-autopilot.startWebInterface');
+            
+            // Check web interface dependencies FIRST 
+            try {
+                debugLog('🔍 Validating web interface dependencies...');
+                const config = vscode.workspace.getConfiguration('claudeAutopilot');
+                const useExternalServer = config.get<boolean>('webInterface.useExternalServer', false);
+                
+                if (useExternalServer) {
+                    const dependencies = await runDependencyCheck();
+                    
+                    if (!dependencies.ngrok.available) {
+                        debugLog('❌ BLOCKING WEB INTERFACE START - ngrok missing');
+                        showDependencyStatus(dependencies);
+                        return; // BLOCK START
+                    }
+                }
+                
+                debugLog('✅ Web interface dependencies available, proceeding');
+                
+            } catch (error) {
+                debugLog(`❌ Failed to check web interface dependencies: ${error}`);
+                showErrorFromException(error, 'Failed to check dependencies');
+                return; // BLOCK START
+            }
             
             try {
                 const webServer = getMobileServer();
@@ -746,8 +803,19 @@ export function activate(context: vscode.ExtensionContext) {
         })
     ];
 
-    // Add all commands to subscriptions
-    context.subscriptions.push(...commands);
+    // Watch for external server setting changes specifically
+    const externalServerWatcher = vscode.workspace.onDidChangeConfiguration(async event => {
+        debugLog(`🔧 Configuration change detected, affects external server: ${event.affectsConfiguration('claudeAutopilot.webInterface.useExternalServer')}`);
+        
+        if (event.affectsConfiguration('claudeAutopilot.webInterface.useExternalServer')) {
+            debugLog('🌐 External server setting changed, validating ngrok...');
+            const { validateExternalServerSetting } = await import('./services/dependency-check/main');
+            await validateExternalServerSetting();
+        }
+    });
+
+    // Add all commands and watchers to subscriptions
+    context.subscriptions.push(...commands, configWatcher!, externalServerWatcher);
 
     debugLog(' Claude Autopilot Extension activated successfully');
 }
@@ -774,11 +842,7 @@ export function deactivate() {
         // Stop health check
         stopHealthCheck();
         
-        // Stop configuration watcher
-        if (configWatcher) {
-            configWatcher.dispose();
-            configWatcher = undefined;
-        }
+        // Note: configWatcher is now managed by context.subscriptions
         
         // Stop web server
         const webServer = getMobileServer();
