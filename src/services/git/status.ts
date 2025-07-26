@@ -1,8 +1,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import { GitFileStatus, GitBranchInfo, GitStatusResult } from './types';
 import { getWorkspaceRoot, sanitizeGitOutput, isGitRepository, GitSecurityError } from './security';
-
-const GIT_TIMEOUT = 30000; // 30 seconds
+import { GIT_TIMEOUT } from '../../core/constants/timeouts';
 
 export async function getGitStatus(): Promise<GitStatusResult> {
     const workspaceRoot = getWorkspaceRoot();

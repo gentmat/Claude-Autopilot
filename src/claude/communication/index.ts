@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { MessageItem } from '../../core/types';
 import { messageQueue, claudeProcess, sessionReady, processingQueue, currentMessage, setCurrentMessage, setProcessingQueue } from '../../core/state';
 import { debugLog } from '../../utils/logging';
+import { getErrorMessage } from '../../utils/error-handler';
 import { updateWebviewContent, updateSessionState } from '../../ui/webview';
 import { saveWorkspaceHistory, ensureHistoryRun, updateMessageStatusInHistory } from '../../queue/processor/history';
 import { TIMEOUT_MS, ANSI_CLEAR_SCREEN_PATTERNS } from '../../core/constants';
@@ -101,7 +102,7 @@ export async function processNextMessage(): Promise<void> {
     } catch (error) {
         debugLog(`❌ Error processing message #${message.id}: ${error}`);
         
-        const errorString = error instanceof Error ? error.message : String(error);
+        const errorString = getErrorMessage(error);
         
         message.status = 'error';
         message.error = `Processing failed: ${errorString}`;

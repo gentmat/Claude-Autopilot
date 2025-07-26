@@ -7,6 +7,9 @@ import {
     setClaudeProcess, setSessionReady, setCurrentMessage, setProcessingQueue
 } from '../../core/state';
 import { debugLog, formatTerminalOutput, sendToWebviewTerminal } from '../../utils/logging';
+import { getErrorMessage } from '../../utils/error-handler';
+import { showInfo, showError, showErrorFromException, Messages } from '../../utils/notifications';
+import { DebugEmojis, formatDebugMessage } from '../../core/constants/ui-strings';
 import { updateWebviewContent, updateSessionState } from '../../ui/webview';
 import { sendClaudeOutput } from '../../claude/output';
 import { handleUsageLimit, isCurrentUsageLimit } from '../../services/usage';
@@ -19,23 +22,28 @@ export async function startClaudeSession(skipPermissions: boolean = true): Promi
     
     try {
         if (claudeProcess) {
-            vscode.window.showInformationMessage('Claude session is already running');
+            showInfo(Messages.SESSION_ALREADY_RUNNING);
             debugLog('Claude session already running - aborting');
             return;
         }
 
         // Check dependencies before starting
-        debugLog('🔍 Checking dependencies...');
+        debugLog(formatDebugMessage(DebugEmojis.SEARCH, 'Checking dependencies...'));
         let dependencyResults;
         try {
             dependencyResults = await runDependencyCheck();
         } catch (error) {
-            debugLog(`❌ Failed to check dependencies: ${error}`);
-            vscode.window.showErrorMessage(`Failed to check dependencies: ${error instanceof Error ? error.message : String(error)}`);
+            debugLog(formatDebugMessage(DebugEmojis.ERROR, `Failed to check dependencies: ${error}`));
+            showErrorFromException(error, 'Failed to check dependencies');
             return;
         }
         
-        if (!dependencyResults.allReady) {
+        // Check if all critical dependencies are ready
+        const allReady = dependencyResults.claude.available && 
+                        dependencyResults.python.available && 
+                        dependencyResults.wrapper.available;
+        
+        if (!allReady) {
             debugLog('❌ Dependencies not satisfied, showing status');
             showDependencyStatus(dependencyResults);
             return;
@@ -56,7 +64,7 @@ export async function startClaudeSession(skipPermissions: boolean = true): Promi
         const wrapperPath = dependencyResults.wrapper.path;
         if (!wrapperPath) {
             const errorMsg = 'Claude PTY wrapper not found. Please reinstall the extension.';
-            vscode.window.showErrorMessage(errorMsg);
+            showError(errorMsg);
             debugLog('❌ PTY wrapper file not found');
             throw new Error(errorMsg);
         }
@@ -68,9 +76,9 @@ export async function startClaudeSession(skipPermissions: boolean = true): Promi
             }
             fs.accessSync(wrapperPath, fs.constants.R_OK);
         } catch (error) {
-            const errorMsg = `Cannot access PTY wrapper: ${error instanceof Error ? error.message : String(error)}`;
-            vscode.window.showErrorMessage(errorMsg);
-            debugLog(`❌ Cannot access wrapper file: ${error}`);
+            const errorMsg = `Cannot access PTY wrapper: ${getErrorMessage(error)}`;
+            showError(errorMsg);
+            debugLog(formatDebugMessage(DebugEmojis.ERROR, `Cannot access wrapper file: ${error}`));
             throw new Error(errorMsg);
         }
     
@@ -95,15 +103,15 @@ export async function startClaudeSession(skipPermissions: boolean = true): Promi
                 }
             });
         } catch (error) {
-            const errorMsg = `Failed to spawn Claude process: ${error instanceof Error ? error.message : String(error)}`;
-            vscode.window.showErrorMessage(errorMsg);
-            debugLog(`❌ Process spawn error: ${error}`);
+            const errorMsg = `Failed to spawn Claude process: ${getErrorMessage(error)}`;
+            showError(errorMsg);
+            debugLog(formatDebugMessage(DebugEmojis.ERROR, `Process spawn error: ${error}`));
             throw new Error(errorMsg);
         }
 
         if (!spawnedProcess || !spawnedProcess.pid) {
             const errorMsg = 'Failed to start Claude process - no process ID';
-            vscode.window.showErrorMessage(errorMsg);
+            showError(errorMsg);
             debugLog('❌ Failed to start Claude process - no PID');
             throw new Error(errorMsg);
         }
@@ -255,8 +263,8 @@ export async function startClaudeSession(skipPermissions: boolean = true): Promi
 
     } catch (error) {
         // Global catch block for any unexpected errors during session startup
-        const errorMsg = `Failed to start Claude session: ${error instanceof Error ? error.message : String(error)}`;
-        debugLog(`❌ Claude session startup failed: ${error}`);
+        const errorMsg = `Failed to start Claude session: ${getErrorMessage(error)}`;
+        debugLog(formatDebugMessage(DebugEmojis.ERROR, `Claude session startup failed: ${error}`));
         vscode.window.showErrorMessage(errorMsg);
         
         // Clean up any partial state
@@ -329,8 +337,8 @@ export function handleClaudeKeypress(key: string): void {
                 return;
         }
     } catch (error) {
-        const errorMsg = `Failed to send keypress '${key}': ${error instanceof Error ? error.message : String(error)}`;
-        debugLog(`❌ Keypress error: ${error}`);
+        const errorMsg = `Failed to send keypress '${key}': ${getErrorMessage(error)}`;
+        debugLog(formatDebugMessage(DebugEmojis.ERROR, `Keypress error: ${error}`));
         vscode.window.showErrorMessage(errorMsg);
     }
 }

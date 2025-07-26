@@ -16,6 +16,7 @@ import { recoverWaitingMessages, stopSleepPrevention, stopHealthCheck, startSche
 import { sendSecuritySettings, toggleXssbypassSetting } from './services/security';
 import { getMobileServer } from './services/mobile';
 import { debugLog } from './utils';
+import { showError, showInfo, showWarning, showInput, Messages, showErrorFromException } from './utils/notifications';
 
 let configWatcher: vscode.Disposable | undefined;
 
@@ -93,7 +94,7 @@ export function activate(context: vscode.ExtensionContext) {
                                     await startProcessingQueue();
                                 }
                             } catch (error) {
-                                vscode.window.showErrorMessage(`Failed to start processing: ${(error as Error).message}`);
+                                showErrorFromException(error, Messages.FAILED_TO_START_PROCESSING);
                                 debugLog(`Error starting processing: ${error}`);
                             }
                             break;
@@ -105,7 +106,7 @@ export function activate(context: vscode.ExtensionContext) {
                             break;
                         case 'startClaudeSession':
                             startClaudeSession(message.skipPermissions).catch(error => {
-                                vscode.window.showErrorMessage(`Failed to start Claude session: ${(error as Error).message}`);
+                                showErrorFromException(error, Messages.FAILED_TO_START_SESSION);
                                 debugLog(`Error starting Claude session: ${error}`);
                             });
                             break;
@@ -183,21 +184,21 @@ export function activate(context: vscode.ExtensionContext) {
                             try {
                                 await vscode.commands.executeCommand('claude-autopilot.startWebInterface');
                             } catch (error) {
-                                vscode.window.showErrorMessage(`Failed to start web interface: ${(error as Error).message}`);
+                                showErrorFromException(error, Messages.FAILED_TO_START_WEB_INTERFACE);
                             }
                             break;
                         case 'stopWebInterface':
                             try {
                                 await vscode.commands.executeCommand('claude-autopilot.stopWebInterface');
                             } catch (error) {
-                                vscode.window.showErrorMessage(`Failed to stop web interface: ${(error as Error).message}`);
+                                showErrorFromException(error, Messages.FAILED_TO_STOP_WEB_INTERFACE);
                             }
                             break;
                         case 'showWebInterfaceQR':
                             try {
                                 await vscode.commands.executeCommand('claude-autopilot.showWebInterfaceQR');
                             } catch (error) {
-                                vscode.window.showErrorMessage(`Failed to show QR code: ${(error as Error).message}`);
+                                showErrorFromException(error, Messages.FAILED_TO_SHOW_QR);
                             }
                             break;
                         case 'openWebInterface':
@@ -207,10 +208,10 @@ export function activate(context: vscode.ExtensionContext) {
                                 if (webUrl) {
                                     vscode.env.openExternal(vscode.Uri.parse(webUrl));
                                 } else {
-                                    vscode.window.showErrorMessage('Web interface is not running');
+                                    showError(Messages.WEB_INTERFACE_NOT_RUNNING);
                                 }
                             } catch (error) {
-                                vscode.window.showErrorMessage(`Failed to open web interface: ${(error as Error).message}`);
+                                showErrorFromException(error, Messages.FAILED_TO_OPEN_WEB_INTERFACE);
                             }
                             break;
                         case 'getWebServerStatus':
@@ -230,7 +231,7 @@ export function activate(context: vscode.ExtensionContext) {
                                 vscode.commands.executeCommand('workbench.action.openSettings', '@ext:benbasha.claude-autopilot');
                             } catch (error) {
                                 debugLog(`Error opening settings: ${error}`);
-                                vscode.window.showErrorMessage(`Failed to open settings: ${(error as Error).message}`);
+                                showErrorFromException(error, Messages.FAILED_TO_OPEN_SETTINGS);
                             }
                             break;
                         default:
@@ -264,7 +265,7 @@ export function activate(context: vscode.ExtensionContext) {
                     }
                 } catch (error) {
                     debugLog(`Error auto-starting Claude session: ${error}`);
-                    vscode.window.showWarningMessage(`Failed to auto-start Claude session: ${(error as Error).message}`);
+                    showWarning(Messages.FAILED_AUTO_START_SESSION);
                 }
             } else if (scheduledStart) {
                 debugLog(`✅ Scheduling Claude session start for ${scheduledStart}`);
@@ -286,14 +287,14 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('claude-autopilot.addMessage', async () => {
             debugLog('🚀 Command: claude-autopilot.addMessage');
             
-            const message = await vscode.window.showInputBox({
+            const message = await showInput({
                 prompt: 'Enter message to add to Claude queue',
-                placeHolder: 'Type your message here...'
+                placeholder: 'Type your message here...'
             });
             
             if (message) {
                 addMessageToQueueFromWebview(message);
-                vscode.window.showInformationMessage('Message added to Claude queue');
+                showInfo(Messages.MESSAGE_ADDED);
             }
         }),
 
@@ -487,7 +488,7 @@ export function activate(context: vscode.ExtensionContext) {
                     (message) => {
                         switch (message.command) {
                             case 'showMessage':
-                                vscode.window.showInformationMessage(message.text);
+                                showInfo(message.text);
                                 break;
                             case 'openUrl':
                                 vscode.env.openExternal(vscode.Uri.parse(message.url));
@@ -502,8 +503,8 @@ export function activate(context: vscode.ExtensionContext) {
                     context.subscriptions
                 );
 
-                vscode.window.showInformationMessage(
-                    `Web interface started! Scan the QR code or visit: ${webUrl}`
+                showInfo(
+                    Messages.WEB_INTERFACE_STARTED(webUrl)
                 );
                 
                 // Send status update to main panel if open
@@ -517,7 +518,7 @@ export function activate(context: vscode.ExtensionContext) {
                 
             } catch (error) {
                 debugLog(`❌ Failed to start web interface: ${error}`);
-                vscode.window.showErrorMessage(`Failed to start web interface: ${(error as Error).message}`);
+                showErrorFromException(error, Messages.FAILED_TO_START_WEB_INTERFACE);
             }
         }),
 
@@ -527,7 +528,7 @@ export function activate(context: vscode.ExtensionContext) {
             try {
                 const webServer = getMobileServer();
                 await webServer.stop();
-                vscode.window.showInformationMessage('Web interface stopped');
+                showInfo(Messages.WEB_INTERFACE_STOPPED);
                 
                 // Send status update to main panel if open
                 if (claudePanel) {
@@ -539,7 +540,7 @@ export function activate(context: vscode.ExtensionContext) {
                 }
             } catch (error) {
                 debugLog(`❌ Failed to stop web interface: ${error}`);
-                vscode.window.showErrorMessage(`Failed to stop web interface: ${(error as Error).message}`);
+                showErrorFromException(error, Messages.FAILED_TO_STOP_WEB_INTERFACE);
             }
         }),
 
@@ -550,7 +551,7 @@ export function activate(context: vscode.ExtensionContext) {
                 const webServer = getMobileServer();
                 
                 if (!webServer.isRunning()) {
-                    vscode.window.showErrorMessage('Web interface is not running. Please start it first.');
+                    showError(Messages.WEB_INTERFACE_NOT_RUNNING);
                     return;
                 }
 
@@ -723,7 +724,7 @@ export function activate(context: vscode.ExtensionContext) {
                     (message) => {
                         switch (message.command) {
                             case 'showMessage':
-                                vscode.window.showInformationMessage(message.text);
+                                showInfo(message.text);
                                 break;
                             case 'openUrl':
                                 vscode.env.openExternal(vscode.Uri.parse(message.url));
@@ -740,7 +741,7 @@ export function activate(context: vscode.ExtensionContext) {
                 
             } catch (error) {
                 debugLog(`❌ Failed to show web interface QR: ${error}`);
-                vscode.window.showErrorMessage(`Failed to show QR code: ${(error as Error).message}`);
+                showErrorFromException(error, Messages.FAILED_TO_SHOW_QR);
             }
         })
     ];

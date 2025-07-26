@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 import { getWorkspaceRoot, resolveAndValidatePath, sanitizeGitOutput, isGitRepository, GitSecurityError } from './security';
-
-const GIT_TIMEOUT = 30000; // 30 seconds
+import { createErrorResult } from '../../utils/error-handler';
+import { GIT_TIMEOUT } from '../../core/constants/timeouts';
 
 export interface GitOperationResult {
     success: boolean;
@@ -30,11 +30,9 @@ export async function stageFile(filePath: string): Promise<GitOperationResult> {
             message: `File staged: ${relativePath}`
         };
     } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
         return {
-            success: false,
-            message: 'Failed to stage file',
-            error: message
+            ...createErrorResult(error, { operation: 'Failed to stage file' }),
+            message: 'Failed to stage file'
         };
     }
 }
@@ -60,11 +58,9 @@ export async function unstageFile(filePath: string): Promise<GitOperationResult>
             message: `File unstaged: ${relativePath}`
         };
     } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
         return {
-            success: false,
-            message: 'Failed to unstage file',
-            error: message
+            ...createErrorResult(error, { operation: 'Failed to unstage file' }),
+            message: 'Failed to unstage file'
         };
     }
 }
@@ -103,11 +99,9 @@ export async function discardChanges(filePath: string): Promise<GitOperationResu
             message: `Changes discarded: ${relativePath}`
         };
     } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
         return {
-            success: false,
-            message: 'Failed to discard changes',
-            error: message
+            ...createErrorResult(error, { operation: 'Failed to discard changes' }),
+            message: 'Failed to discard changes'
         };
     }
 }
@@ -130,11 +124,9 @@ export async function stageAllFiles(): Promise<GitOperationResult> {
             message: 'All files staged'
         };
     } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
         return {
-            success: false,
-            message: 'Failed to stage all files',
-            error: message
+            ...createErrorResult(error, { operation: 'Failed to stage all files' }),
+            message: 'Failed to stage all files'
         };
     }
 }
@@ -157,11 +149,9 @@ export async function unstageAllFiles(): Promise<GitOperationResult> {
             message: 'All files unstaged'
         };
     } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
         return {
-            success: false,
-            message: 'Failed to unstage all files',
-            error: message
+            ...createErrorResult(error, { operation: 'Failed to unstage all files' }),
+            message: 'Failed to unstage all files'
         };
     }
 }
@@ -188,11 +178,9 @@ export async function discardAllChanges(): Promise<GitOperationResult> {
             message: 'All changes discarded'
         };
     } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
         return {
-            success: false,
-            message: 'Failed to discard all changes',
-            error: message
+            ...createErrorResult(error, { operation: 'Failed to discard all changes' }),
+            message: 'Failed to discard all changes'
         };
     }
 }
@@ -225,11 +213,9 @@ export async function stageFiles(filePaths: string[]): Promise<GitOperationResul
             message: `${filePaths.length} files staged`
         };
     } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
         return {
-            success: false,
-            message: 'Failed to stage files',
-            error: message
+            ...createErrorResult(error, { operation: 'Failed to stage files' }),
+            message: 'Failed to stage files'
         };
     }
 }
@@ -262,11 +248,9 @@ export async function unstageFiles(filePaths: string[]): Promise<GitOperationRes
             message: `${filePaths.length} files unstaged`
         };
     } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
         return {
-            success: false,
-            message: 'Failed to unstage files',
-            error: message
+            ...createErrorResult(error, { operation: 'Failed to unstage files' }),
+            message: 'Failed to unstage files'
         };
     }
 }

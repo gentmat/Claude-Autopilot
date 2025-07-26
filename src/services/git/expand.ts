@@ -1,8 +1,7 @@
 import { spawn } from 'child_process';
 import { GitDiffLine } from './types';
 import { getWorkspaceRoot, resolveAndValidatePath, sanitizeGitOutput, isGitRepository, GitSecurityError } from './security';
-
-const GIT_TIMEOUT = 30000; // 30 seconds
+import { GIT_TIMEOUT } from '../../core/constants/timeouts';
 
 export async function expandContext(
     filePath: string, 

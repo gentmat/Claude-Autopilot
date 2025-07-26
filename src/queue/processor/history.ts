@@ -3,20 +3,23 @@ import { HistoryRun, MessageItem } from '../../core/types';
 import { extensionContext, currentRun, messageQueue, setCurrentRun } from '../../core/state';
 import { claudePanel } from '../../core/state';
 import { debugLog, getHistoryStorageKey, getPendingQueueStorageKey, getWorkspacePath } from '../../utils/logging';
+import { getErrorMessage } from '../../utils/error-handler';
+import { showErrorFromException } from '../../utils/notifications';
+import { DebugEmojis, formatDebugMessage } from '../../core/constants/ui-strings';
 import { getValidatedConfig } from '../../core/config';
 import { enforceMessageSizeLimits } from '../memory';
 
 
 export function saveWorkspaceHistory(): void {
     if (!extensionContext || !currentRun) {
-        debugLog(`⚠️ Cannot save workspace history: ${!extensionContext ? 'no extension context' : 'no current run'}`);
+        debugLog(formatDebugMessage(DebugEmojis.WARNING, `Cannot save workspace history: ${!extensionContext ? 'no extension context' : 'no current run'}`));
         return;
     }
     
     // Check if auto-save is enabled
     const config = getValidatedConfig();
     if (!config.history.autoSave) {
-        debugLog(`💾 History auto-save is disabled, skipping save`);
+        debugLog(formatDebugMessage(DebugEmojis.SAVE, 'History auto-save is disabled, skipping save'));
         return;
     }
     
@@ -62,8 +65,8 @@ export function saveWorkspaceHistory(): void {
         debugLog(`💾 Saved workspace history with ${recentHistory.length} runs`);
         
     } catch (error) {
-        debugLog(`❌ Failed to save workspace history: ${error}`);
-        vscode.window.showErrorMessage(`Failed to save workspace history: ${error instanceof Error ? error.message : String(error)}`);
+        debugLog(formatDebugMessage(DebugEmojis.ERROR, `Failed to save workspace history: ${error}`));
+        showErrorFromException(error, 'Failed to save workspace history');
     }
     
     // Always try to save pending queue regardless of history auto-save setting

@@ -12,6 +12,7 @@ import * as QRCode from 'qrcode';
 import { v4 as uuidv4 } from 'uuid';
 import { randomBytes } from 'crypto';
 import { debugLog } from '../../utils/logging';
+import { getErrorMessage } from '../../utils/error-handler';
 import { 
     messageQueue, 
     isRunning, 
@@ -569,7 +570,7 @@ export class MobileServer {
                 res.json(status);
             } catch (error) {
                 console.error('Error getting git status:', error);
-                const message = error instanceof Error ? error.message : 'Failed to get git status';
+                const message = getErrorMessage(error) || 'Failed to get git status';
                 res.status(500).json({ error: message });
             }
         });
@@ -595,7 +596,7 @@ export class MobileServer {
                 res.json(diff);
             } catch (error) {
                 console.error('Error getting file diff:', error);
-                const message = error instanceof Error ? error.message : 'Failed to get file diff';
+                const message = getErrorMessage(error) || 'Failed to get file diff';
                 res.status(500).json({ error: message });
             }
         });

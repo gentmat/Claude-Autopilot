@@ -1,8 +1,7 @@
 import { spawn } from 'child_process';
 import { GitDiffResult, GitDiffLine, GitCompareMode } from './types';
 import { getWorkspaceRoot, resolveAndValidatePath, validateFileSize, sanitizeGitOutput, isGitRepository, GitSecurityError } from './security';
-
-const GIT_TIMEOUT = 30000; // 30 seconds
+import { GIT_TIMEOUT } from '../../core/constants/timeouts';
 
 export async function getFileDiff(filePath: string, compareMode: GitCompareMode = 'working'): Promise<GitDiffResult> {
     const workspaceRoot = getWorkspaceRoot();
