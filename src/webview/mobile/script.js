@@ -30,15 +30,39 @@ class MobileInterface {
         this.longPressTimeout = null;
         this.longPressDelay = 500;
         
+        // Check if we're on desktop (1025px+)
+        this.isDesktop = window.matchMedia('(min-width: 1025px)').matches;
+        
         this.init();
     }
 
     init() {
         this.extractAuthToken();
         this.setupEventListeners();
+        this.setupResponsiveHandler();
         this.connect();
         this.updateCurrentTime();
         setInterval(() => this.updateCurrentTime(), 1000);
+    }
+    
+    setupResponsiveHandler() {
+        // Listen for screen size changes
+        const mediaQuery = window.matchMedia('(min-width: 1025px)');
+        mediaQuery.addListener((e) => {
+            this.isDesktop = e.matches;
+            this.handleResponsiveChange();
+        });
+    }
+    
+    handleResponsiveChange() {
+        if (this.isDesktop) {
+            // On desktop: ensure all main section content is visible, but subsections can remain toggled
+            const mainSectionContent = document.querySelectorAll('.section-content');
+            mainSectionContent.forEach(content => {
+                content.style.display = 'block';
+            });
+        }
+        // On mobile: keep current toggle states as they are
     }
 
     extractAuthToken() {
@@ -56,7 +80,7 @@ class MobileInterface {
         console.log('Current URL:', window.location.href);
         
         if (!this.authToken) {
-            this.showToast('Authentication token missing', 'error');
+            this.showToast('Authentication token missing', TOAST_TYPE.ERROR);
             console.error('No token found in URL parameters or injected token');
         }
     }
@@ -85,6 +109,9 @@ class MobileInterface {
 
         // Section toggles
         document.getElementById('queue-toggle').addEventListener('click', () => this.toggleSection('queue'));
+        document.getElementById('explorer-toggle').addEventListener('click', () => this.toggleSection('explorer'));
+        document.getElementById('output-toggle').addEventListener('click', () => this.toggleSection('output'));
+        document.getElementById('git-toggle').addEventListener('click', () => this.toggleSection('git'));
 
         // Modal backdrop clicks
         document.getElementById('add-message-modal').addEventListener('click', (e) => {
@@ -114,20 +141,20 @@ class MobileInterface {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/ws?token=${this.authToken}`;
         
-        this.updateConnectionStatus('connecting');
+        this.updateConnectionStatus(CONNECTION_STATUS.CONNECTING);
         
         try {
             this.ws = new WebSocket(wsUrl);
             
             this.ws.onopen = () => {
                 console.log('Connected to mobile server');
-                this.updateConnectionStatus('connected');
+                this.updateConnectionStatus(CONNECTION_STATUS.CONNECTED);
                 this.reconnectAttempts = 0;
                 
                 
                 // Only show toast once per session or after disconnection
                 if (!this.hasShownConnectedToast) {
-                    this.showToast('Connected to Claude Autopilot', 'success');
+                    this.showToast('Connected to Claude Autopilot', TOAST_TYPE.SUCCESS);
                     this.hasShownConnectedToast = true;
                 }
             };
@@ -143,7 +170,7 @@ class MobileInterface {
             
             this.ws.onclose = (event) => {
                 console.log('WebSocket connection closed:', event.code, event.reason);
-                this.updateConnectionStatus('disconnected');
+                this.updateConnectionStatus(CONNECTION_STATUS.DISCONNECTED);
                 this.ws = null;
                 
                 // Reset the toast flag so it shows again on next successful connection
@@ -152,7 +179,7 @@ class MobileInterface {
                 // Handle different close codes
                 if (event.code === 1008) {
                     // Unauthorized - don't retry, show error
-                    this.showToast('Authentication failed. Please refresh the page.', 'error');
+                    this.showToast('Authentication failed. Please refresh the page.', TOAST_TYPE.ERROR);
                     this.reconnectAttempts = this.maxReconnectAttempts; // Stop retrying
                 } else if (event.code !== 1000) {
                     // Other non-normal closes - attempt reconnect
@@ -162,7 +189,7 @@ class MobileInterface {
             
             this.ws.onerror = (error) => {
                 console.error('WebSocket error:', error);
-                this.updateConnectionStatus('error');
+                this.updateConnectionStatus(CONNECTION_STATUS.ERROR);
             };
         } catch (error) {
             console.error('Failed to create WebSocket connection:', error);
@@ -173,12 +200,12 @@ class MobileInterface {
 
     attemptReconnect() {
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            this.showToast('Connection failed. Please refresh the page.', 'error');
+            this.showToast('Connection failed. Please refresh the page.', TOAST_TYPE.ERROR);
             return;
         }
 
         this.reconnectAttempts++;
-        this.updateConnectionStatus('reconnecting');
+        this.updateConnectionStatus(CONNECTION_STATUS.RECONNECTING);
         
         const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
         console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`);
@@ -221,18 +248,12 @@ class MobileInterface {
         
         connectionStatus.setAttribute('data-status', status);
         
-        const statusTexts = {
-            connecting: 'Connecting...',
-            connected: 'Connected',
-            disconnected: 'Disconnected',
-            reconnecting: 'Reconnecting...',
-            error: 'Connection Error'
-        };
-        
-        const statusText = statusTexts[status] || 'Unknown';
+        const statusText = CONNECTION_STATUS_LABELS[status] || 'Unknown';
         connectionStatus.querySelector('.status-text').textContent = statusText;
         
+        // Update footer connection indicator to match header
         if (connectionIndicator) {
+            connectionIndicator.setAttribute('data-status', status);
             connectionIndicator.querySelector('.status-text').textContent = statusText;
         }
     }
@@ -321,28 +342,15 @@ class MobileInterface {
         item.setAttribute('data-status', message.status);
         item.setAttribute('data-id', message.id);
         
-        const statusEmojis = {
-            pending: '⏳',
-            processing: '⚡',
-            completed: '✅',
-            error: '❌',
-            waiting: '⏱️'
-        };
-        
-        const statusNames = {
-            pending: 'Pending',
-            processing: 'Processing',
-            completed: 'Completed',
-            error: 'Error',
-            waiting: 'Waiting'
-        };
+        const statusEmoji = QUEUE_STATUS_EMOJIS[message.status] || '';
+        const statusName = QUEUE_STATUS_LABELS[message.status] || message.status;
         
         item.innerHTML = `
             <div class="item-content">
                 <div class="item-text">${this.escapeHtml(message.text)}</div>
                 <div class="item-meta">
                     <span class="item-time">${this.formatRelativeTime(message.timestamp)}</span>
-                    <span class="item-status">${statusEmojis[message.status] || ''} ${statusNames[message.status] || message.status}</span>
+                    <span class="item-status">${statusEmoji} ${statusName}</span>
                 </div>
             </div>
             <div class="item-actions">
@@ -395,10 +403,10 @@ class MobileInterface {
             }
             
             const result = await response.json();
-            this.showToast(`Successfully ${action}ed Claude Autopilot`, 'success');
+            this.showToast(`Successfully ${action}ed Claude Autopilot`, TOAST_TYPE.SUCCESS);
         } catch (error) {
             console.error(`Control action ${action} failed:`, error);
-            this.showToast(`Failed to ${action} Claude Autopilot`, 'error');
+            this.showToast(`Failed to ${action} Claude Autopilot`, TOAST_TYPE.ERROR);
         } finally {
             this.hideLoading();
         }
@@ -441,7 +449,7 @@ class MobileInterface {
         const message = input.value.trim();
         
         if (!message) {
-            this.showToast('Please enter a message', 'warning');
+            this.showToast('Please enter a message', TOAST_TYPE.WARNING);
             return;
         }
         
@@ -462,10 +470,10 @@ class MobileInterface {
             }
             
             this.hideAddMessageModal();
-            this.showToast('Message added to queue', 'success');
+            this.showToast('Message added to queue', TOAST_TYPE.SUCCESS);
         } catch (error) {
             console.error('Failed to add message:', error);
-            this.showToast('Failed to add message', 'error');
+            this.showToast('Failed to add message', TOAST_TYPE.ERROR);
         } finally {
             this.hideLoading();
         }
@@ -517,7 +525,7 @@ class MobileInterface {
         const newText = input.value.trim();
         
         if (!newText) {
-            this.showToast('Please enter a message', 'warning');
+            this.showToast('Please enter a message', TOAST_TYPE.WARNING);
             return;
         }
         
@@ -538,10 +546,10 @@ class MobileInterface {
             }
             
             this.hideEditMessageModal();
-            this.showToast('Message updated', 'success');
+            this.showToast('Message updated', TOAST_TYPE.SUCCESS);
         } catch (error) {
             console.error('Failed to edit message:', error);
-            this.showToast('Failed to edit message', 'error');
+            this.showToast('Failed to edit message', TOAST_TYPE.ERROR);
         } finally {
             this.hideLoading();
         }
@@ -563,10 +571,10 @@ class MobileInterface {
                 throw new Error('Failed to duplicate message');
             }
             
-            this.showToast('Message duplicated', 'success');
+            this.showToast('Message duplicated', TOAST_TYPE.SUCCESS);
         } catch (error) {
             console.error('Failed to duplicate message:', error);
-            this.showToast('Failed to duplicate message', 'error');
+            this.showToast('Failed to duplicate message', TOAST_TYPE.ERROR);
         } finally {
             this.hideLoading();
         }
@@ -592,10 +600,10 @@ class MobileInterface {
                 throw new Error('Failed to delete message');
             }
             
-            this.showToast('Message deleted', 'success');
+            this.showToast('Message deleted', TOAST_TYPE.SUCCESS);
         } catch (error) {
             console.error('Failed to delete message:', error);
-            this.showToast('Failed to delete message', 'error');
+            this.showToast('Failed to delete message', TOAST_TYPE.ERROR);
         } finally {
             this.hideLoading();
         }
@@ -775,6 +783,11 @@ class MobileInterface {
     }
 
     toggleSection(sectionName) {
+        // On desktop, main sections are not collapsible
+        if (this.isDesktop) {
+            return;
+        }
+        
         const toggle = document.getElementById(`${sectionName}-toggle`);
         const content = document.getElementById(`${sectionName}-content`);
         const icon = toggle.querySelector('.toggle-icon');
@@ -922,15 +935,15 @@ class MobileInterface {
     }
 
     handleOnline() {
-        this.showToast('Connection restored', 'success');
+        this.showToast('Connection restored', TOAST_TYPE.SUCCESS);
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             this.connect();
         }
     }
 
     handleOffline() {
-        this.showToast('Connection lost', 'warning');
-        this.updateConnectionStatus('disconnected');
+        this.showToast('Connection lost', TOAST_TYPE.WARNING);
+        this.updateConnectionStatus(CONNECTION_STATUS.DISCONNECTED);
     }
 
     // Utility functions
@@ -942,7 +955,7 @@ class MobileInterface {
         document.getElementById('loading-overlay').classList.remove('active');
     }
 
-    showToast(message, type = 'info') {
+    showToast(message, type = TOAST_TYPE.INFO) {
         const container = document.getElementById('toast-container');
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
@@ -1416,13 +1429,13 @@ class FileExplorer {
 
         // Event handlers
         if (item.type === 'directory') {
-            expand.addEventListener('click', (e) => {
+            expand.addEventListener('click', async (e) => {
                 e.stopPropagation();
-                this.toggleFolder(item.path);
+                await this.toggleFolder(item.path);
             });
             
-            div.addEventListener('click', () => {
-                this.toggleFolder(item.path);
+            div.addEventListener('click', async () => {
+                await this.toggleFolder(item.path);
             });
         } else {
             div.addEventListener('click', () => {
@@ -1433,15 +1446,246 @@ class FileExplorer {
         return div;
     }
 
-    toggleFolder(folderPath) {
+    async toggleFolder(folderPath) {
+        const folderElement = document.querySelector(`[data-path="${folderPath}"]`);
+        if (!folderElement) return;
+        
+        const expandIcon = folderElement.querySelector('.file-expand');
+        const folderIcon = folderElement.querySelector('.file-icon');
+        
         if (this.expandedFolders.has(folderPath)) {
+            // Collapsing folder - remove children from DOM
             this.expandedFolders.delete(folderPath);
+            this.removeChildrenFromDOM(folderPath);
+            
+            // Update icons
+            if (expandIcon) expandIcon.textContent = '▶';
+            if (folderIcon) folderIcon.textContent = '📁';
+            
         } else {
+            // Expanding folder
             this.expandedFolders.add(folderPath);
+            
+            // Update icons immediately
+            if (expandIcon) {
+                expandIcon.textContent = '▼';
+                expandIcon.classList.add('expanded');
+            }
+            if (folderIcon) folderIcon.textContent = '📂';
+            
+            // Check if we need to load folder contents
+            const folderItem = this.findItemByPath(this.fileTree, folderPath);
+            if (folderItem && folderItem.type === 'directory') {
+                // Check if folder needs loading
+                const needsLoading = !folderItem.children || 
+                                   folderItem.children.length === 0 || 
+                                   (folderItem.children.length === 0 && !folderItem.hasBeenLoaded);
+                
+                if (needsLoading) {
+                    // Add inline loading indicator
+                    this.addInlineLoading(folderPath);
+                    
+                    // Load folder contents dynamically
+                    console.log('🔄 Loading contents for folder:', folderPath);
+                    await this.loadFolderContents(folderPath, folderItem);
+                    
+                    // Mark as loaded to prevent unnecessary reloads
+                    folderItem.hasBeenLoaded = true;
+                    
+                    // Remove loading and add actual children
+                    this.removeInlineLoading(folderPath);
+                    if (folderItem.children && folderItem.children.length > 0) {
+                        this.addChildrenToDOM(folderPath, folderItem.children);
+                    }
+                } else if (folderItem.children && folderItem.children.length > 0) {
+                    // Add existing children to DOM
+                    this.addChildrenToDOM(folderPath, folderItem.children);
+                }
+            }
+        }
+    }
+    
+    findItemByPath(items, targetPath) {
+        if (!items) return null;
+        
+        for (const item of items) {
+            if (item.path === targetPath) {
+                return item;
+            }
+            if (item.children) {
+                const found = this.findItemByPath(item.children, targetPath);
+                if (found) return found;
+            }
+        }
+        return null;
+    }
+    
+    async loadFolderContents(folderPath, folderItem) {
+        try {
+            // Remove leading slash if present for API call
+            const apiPath = folderPath.startsWith('/') ? folderPath.substring(1) : folderPath;
+            
+            const url = `/api/files/tree?path=${encodeURIComponent(apiPath)}&maxDepth=2`;
+            console.log('🔄 Loading folder contents from:', url);
+            
+            const response = await fetch(url, {
+                headers: { 
+                    'Authorization': `Bearer ${window.CLAUDE_AUTH_TOKEN}`,
+                    'x-session-token': this.getSessionToken()
+                }
+            });
+
+            if (!response.ok) {
+                console.error('Failed to load folder contents:', response.status);
+                return;
+            }
+
+            const data = await response.json();
+            console.log('🔄 Loaded folder contents:', data);
+            
+            if (data.items && data.items.length > 0) {
+                // Update the folder item with the loaded children
+                folderItem.children = data.items;
+                console.log('✅ Updated folder with', data.items.length, 'children');
+            } else {
+                // Ensure children array exists even if empty
+                folderItem.children = [];
+                console.log('📁 Folder is empty');
+            }
+            
+        } catch (error) {
+            console.error('Error loading folder contents:', error);
+            // Ensure children array exists even on error
+            folderItem.children = [];
+        }
+    }
+    
+    addInlineLoading(folderPath) {
+        const folderElement = document.querySelector(`[data-path="${folderPath}"]`);
+        if (!folderElement) return;
+        
+        // Find the folder's level for proper indentation
+        const folderLevel = this.getFolderLevel(folderPath);
+        
+        // Create loading indicator element
+        const loadingDiv = document.createElement('div');
+        loadingDiv.className = 'file-item loading-indicator';
+        loadingDiv.setAttribute('data-loading-for', folderPath);
+        
+        // Add proper indentation
+        const indent = document.createElement('div');
+        indent.className = 'file-indent';
+        indent.style.width = `${(folderLevel + 1) * 20}px`;
+        
+        // No expand button for loading indicator
+        const expandSpace = document.createElement('div');
+        expandSpace.className = 'file-expand';
+        expandSpace.style.width = '16px';
+        
+        // Loading icon
+        const icon = document.createElement('div');
+        icon.className = 'file-icon';
+        icon.textContent = '⏳';
+        icon.style.opacity = '0.7';
+        
+        // Loading text
+        const name = document.createElement('div');
+        name.className = 'file-name';
+        name.textContent = 'Loading...';
+        name.style.fontStyle = 'italic';
+        name.style.opacity = '0.7';
+        
+        loadingDiv.appendChild(indent);
+        loadingDiv.appendChild(expandSpace);
+        loadingDiv.appendChild(icon);
+        loadingDiv.appendChild(name);
+        
+        // Insert after the folder element
+        folderElement.parentNode.insertBefore(loadingDiv, folderElement.nextSibling);
+    }
+    
+    removeInlineLoading(folderPath) {
+        const loadingElement = document.querySelector(`[data-loading-for="${folderPath}"]`);
+        if (loadingElement) {
+            loadingElement.remove();
+        }
+    }
+    
+    getFolderLevel(folderPath) {
+        // Count the number of slashes to determine nesting level
+        const cleanPath = folderPath.replace(/^\/+|\/+$/g, ''); // Remove leading/trailing slashes
+        if (!cleanPath) return 0;
+        return cleanPath.split('/').length - 1;
+    }
+    
+    removeChildrenFromDOM(folderPath) {
+        // Remove all elements that are children of this folder
+        const allItems = document.querySelectorAll('.file-item');
+        const folderLevel = this.getFolderLevel(folderPath);
+        
+        let found = false;
+        for (const item of allItems) {
+            const itemPath = item.getAttribute('data-path');
+            
+            // Skip until we find the folder
+            if (itemPath === folderPath) {
+                found = true;
+                continue;
+            }
+            
+            if (!found) continue;
+            
+            // If we find an item at the same level or higher, we're done
+            if (itemPath && this.getFolderLevel(itemPath) <= folderLevel) {
+                break;
+            }
+            
+            // This is a child - remove it
+            item.remove();
         }
         
-        // Re-render the tree to show/hide children
-        this.renderFileTree(this.fileTree);
+        // Also remove any loading indicators
+        this.removeInlineLoading(folderPath);
+    }
+    
+    addChildrenToDOM(folderPath, children) {
+        const folderElement = document.querySelector(`[data-path="${folderPath}"]`);
+        if (!folderElement) return;
+        
+        const folderLevel = this.getFolderLevel(folderPath);
+        let insertAfter = folderElement;
+        
+        // Create and insert child elements
+        children.forEach((child, index) => {
+            const childElement = this.createFileItem(child, folderLevel + 1);
+            
+            // Insert after the previous element
+            insertAfter.parentNode.insertBefore(childElement, insertAfter.nextSibling);
+            insertAfter = childElement;
+            
+            // If this child is expanded, add its children too
+            if (child.type === 'directory' && child.children && this.expandedFolders.has(child.path)) {
+                const nestedChildren = this.getAllNestedChildren(child);
+                nestedChildren.forEach((nestedChild, nestedIndex) => {
+                    const nestedLevel = this.getFolderLevel(nestedChild.path);
+                    const nestedElement = this.createFileItem(nestedChild, nestedLevel);
+                    insertAfter.parentNode.insertBefore(nestedElement, insertAfter.nextSibling);
+                    insertAfter = nestedElement;
+                });
+            }
+        });
+    }
+    
+    getAllNestedChildren(item, result = []) {
+        if (item.children) {
+            item.children.forEach(child => {
+                result.push(child);
+                if (child.type === 'directory' && child.children && this.expandedFolders.has(child.path)) {
+                    this.getAllNestedChildren(child, result);
+                }
+            });
+        }
+        return result;
     }
 
     getFileIcon(item) {
@@ -1541,36 +1785,21 @@ class FileExplorer {
         }
 
         if (codeElement) {
-            codeElement.textContent = data.content;
-            codeElement.className = `language-${data.language}`;
+            // Get the file extension for proper language detection
+            const extension = this.currentFilePath.split('.').pop() || '';
+            const language = this.getLanguageFromExtension(extension);
             
-            // Basic syntax highlighting for common cases
-            this.applySyntaxHighlighting(codeElement, data.language);
+            // Set class
+            codeElement.className = `language-${language}`;
+            
+            // Apply syntax highlighting using the working method from diff viewer
+            const highlightedContent = this.applySyntaxHighlightingToText(data.content, language);
+            codeElement.innerHTML = highlightedContent;
         }
 
         this.hidePreviewError();
     }
 
-    applySyntaxHighlighting(element, language) {
-        // Basic syntax highlighting - in production you'd want a proper library
-        const content = element.textContent;
-        let highlightedContent = content;
-
-        // Basic highlighting for common languages
-        if (language === 'javascript' || language === 'typescript') {
-            highlightedContent = content
-                .replace(/\b(const|let|var|function|class|if|else|return|import|export|from|async|await)\b/g, '<span style="color: #569cd6;">$1</span>')
-                .replace(/(['"`])((?:\\.|(?!\1)[^\\])*?)\1/g, '<span style="color: #ce9178;">$&</span>')
-                .replace(/\/\/.*$/gm, '<span style="color: #6a9955;">$&</span>');
-        } else if (language === 'json') {
-            highlightedContent = content
-                .replace(/("([^"\\]|\\.)*")(\s*:)/g, '<span style="color: #9cdcfe;">$1</span>$3')
-                .replace(/:\s*("([^"\\]|\\.)*")/g, ': <span style="color: #ce9178;">$1</span>')
-                .replace(/:\s*(\d+)/g, ': <span style="color: #b5cea8;">$1</span>');
-        }
-
-        element.innerHTML = highlightedContent;
-    }
 
     // Modal and UI management methods
     showPreviewModal() {
@@ -1707,9 +1936,19 @@ class FileExplorer {
     showLoading(show) {
         const loading = document.getElementById('file-tree-loading');
         const tree = document.getElementById('file-tree');
+        const empty = document.getElementById('file-tree-empty');
+        
         if (loading && tree) {
-            loading.style.display = show ? 'flex' : 'none';
-            tree.style.display = show ? 'none' : 'block';
+            if (show) {
+                // Clear current content and show only loading
+                tree.innerHTML = '';
+                tree.style.display = 'none';
+                if (empty) empty.style.display = 'none';
+                loading.style.display = 'flex';
+            } else {
+                loading.style.display = 'none';
+                tree.style.display = 'block';
+            }
         }
     }
 
@@ -1764,25 +2003,207 @@ class FileExplorer {
             console.log('Toast:', message);
         }
     }
+    
+    getLanguageFromExtension(extension) {
+        const languageMap = {
+            'js': 'javascript',
+            'jsx': 'javascript', 
+            'ts': 'typescript',
+            'tsx': 'typescript',
+            'json': 'json',
+            'html': 'html',
+            'htm': 'html',
+            'css': 'css',
+            'scss': 'css',
+            'sass': 'css',
+            'py': 'python',
+            'md': 'markdown',
+            'txt': 'text',
+            'xml': 'xml',
+            'yaml': 'yaml',
+            'yml': 'yaml'
+        };
+        return languageMap[extension.toLowerCase()] || 'text';
+    }
+    
+    applySyntaxHighlightingToText(content, language) {
+        // First escape HTML characters to prevent XSS and display issues
+        let escapedContent = this.escapeHtml(content);
+
+        // Basic highlighting for common languages
+        if (language === 'javascript' || language === 'typescript') {
+            escapedContent = escapedContent
+                .replace(/\b(const|let|var|function|class|if|else|return|import|export|from|async|await|for|while|do|break|continue|switch|case|default|try|catch|finally|throw|new|this|super|extends|implements|interface|type|enum|namespace|public|private|protected|static|readonly)\b/g, '<span style="color: #569cd6;">$1</span>')
+                .replace(/(&#x27;|&quot;|`)([^&#x27;&quot;`]*?)\1/g, '<span style="color: #ce9178;">$&</span>')
+                .replace(/\/\/.*$/gm, '<span style="color: #6a9955;">$&</span>')
+                .replace(/\/\*[\s\S]*?\*\//g, '<span style="color: #6a9955;">$&</span>')
+                .replace(/\b(\d+\.?\d*)\b/g, '<span style="color: #b5cea8;">$1</span>');
+        } else if (language === 'json') {
+            escapedContent = escapedContent
+                .replace(/(&quot;[^&quot;]*&quot;)(\s*:)/g, '<span style="color: #9cdcfe;">$1</span>$2')
+                .replace(/:\s*(&quot;[^&quot;]*&quot;)/g, ': <span style="color: #ce9178;">$1</span>')
+                .replace(/:\s*(\d+\.?\d*)/g, ': <span style="color: #b5cea8;">$1</span>')
+                .replace(/:\s*(true|false|null)/g, ': <span style="color: #569cd6;">$1</span>');
+        } else if (language === 'python') {
+            escapedContent = escapedContent
+                .replace(/\b(def|class|if|elif|else|for|while|try|except|finally|with|as|import|from|return|yield|break|continue|pass|lambda|and|or|not|is|in|True|False|None)\b/g, '<span style="color: #569cd6;">$1</span>')
+                .replace(/(&#x27;|&quot;|&#x60;)([^&#x27;&quot;&#x60;]*?)\1/g, '<span style="color: #ce9178;">$&</span>')
+                .replace(/#.*$/gm, '<span style="color: #6a9955;">$&</span>')
+                .replace(/@\w+/g, '<span style="color: #dcdcaa;">$&</span>')
+                .replace(/\b(\d+\.?\d*)\b/g, '<span style="color: #b5cea8;">$1</span>');
+        } else if (language === 'css') {
+            escapedContent = escapedContent
+                .replace(/([a-zA-Z-]+)(\s*:)/g, '<span style="color: #9cdcfe;">$1</span>$2')
+                .replace(/:\s*([^;{}]+)/g, ': <span style="color: #ce9178;">$1</span>')
+                .replace(/\/\*[\s\S]*?\*\//g, '<span style="color: #6a9955;">$&</span>');
+        } else if (language === 'html') {
+            escapedContent = escapedContent
+                .replace(/&lt;(\/?[a-zA-Z][^&gt;]*)&gt;/g, '<span style="color: #569cd6;">$&</span>')
+                .replace(/(\w+)=(&quot;[^&quot;]*&quot;)/g, '<span style="color: #9cdcfe;">$1</span>=<span style="color: #ce9178;">$2</span>');
+        }
+
+        return escapedContent;
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
 }
+
+// Application constants - no more magic strings!
+
+// Connection status constants
+const CONNECTION_STATUS = {
+    CONNECTED: 'connected',
+    DISCONNECTED: 'disconnected',
+    CONNECTING: 'connecting',
+    RECONNECTING: 'reconnecting',
+    ERROR: 'error'
+};
+
+const CONNECTION_STATUS_LABELS = {
+    [CONNECTION_STATUS.CONNECTING]: 'Connecting...',
+    [CONNECTION_STATUS.CONNECTED]: 'Connected',
+    [CONNECTION_STATUS.DISCONNECTED]: 'Disconnected',
+    [CONNECTION_STATUS.RECONNECTING]: 'Reconnecting...',
+    [CONNECTION_STATUS.ERROR]: 'Connection Error'
+};
+
+// Queue message status constants
+const QUEUE_STATUS = {
+    PENDING: 'pending',
+    PROCESSING: 'processing',
+    COMPLETED: 'completed',
+    ERROR: 'error',
+    WAITING: 'waiting'
+};
+
+const QUEUE_STATUS_LABELS = {
+    [QUEUE_STATUS.PENDING]: 'Pending',
+    [QUEUE_STATUS.PROCESSING]: 'Processing',
+    [QUEUE_STATUS.COMPLETED]: 'Completed',
+    [QUEUE_STATUS.ERROR]: 'Error',
+    [QUEUE_STATUS.WAITING]: 'Waiting'
+};
+
+const QUEUE_STATUS_EMOJIS = {
+    [QUEUE_STATUS.PENDING]: '⏳',
+    [QUEUE_STATUS.PROCESSING]: '⚡',
+    [QUEUE_STATUS.COMPLETED]: '✅',
+    [QUEUE_STATUS.ERROR]: '❌',
+    [QUEUE_STATUS.WAITING]: '⏱️'
+};
+
+// Toast notification types
+const TOAST_TYPE = {
+    SUCCESS: 'success',
+    ERROR: 'error',
+    WARNING: 'warning',
+    INFO: 'info'
+};
+
+// Git file status constants
+const GIT_STATUS = {
+    MODIFIED: 'modified',
+    ADDED: 'added',
+    DELETED: 'deleted',
+    RENAMED: 'renamed',
+    COPIED: 'copied',
+    UNTRACKED: 'untracked'
+};
+
+const GIT_STATUS_ICONS = {
+    [GIT_STATUS.MODIFIED]: '📝',
+    [GIT_STATUS.ADDED]: '➕',
+    [GIT_STATUS.DELETED]: '🗑️',
+    [GIT_STATUS.RENAMED]: '↔️',
+    [GIT_STATUS.COPIED]: '📋',
+    [GIT_STATUS.UNTRACKED]: '❓'
+};
+
+// Diff view mode constants
+const DIFF_VIEW_MODE = {
+    INLINE: 'inline',
+    FINAL_FILE: 'final_file'
+};
+
+const DIFF_VIEW_LABELS = {
+    [DIFF_VIEW_MODE.INLINE]: 'Diff View',
+    [DIFF_VIEW_MODE.FINAL_FILE]: 'File View'
+};
 
 class GitChanges {
     constructor() {
         this.isExpanded = true; // Always expanded since toggle is removed
         this.gitFiles = [];
         this.currentDiffFile = null;
+        this.currentDiffMode = DIFF_VIEW_MODE.INLINE;
         this.refreshInterval = null;
+        
+        // Check if we're on desktop (1025px+)
+        this.isDesktop = window.matchMedia('(min-width: 1025px)').matches;
+        
         this.init();
     }
 
     init() {
         this.setupEventListeners();
+        this.setupResponsiveHandler();
+        this.initializeDiffMode();
         this.loadGitStatus();
         
         // Auto-refresh every 30 seconds (always check for file count)
         this.refreshInterval = setInterval(() => {
             this.loadGitStatus();
         }, 30000);
+    }
+    
+    setupResponsiveHandler() {
+        // Listen for screen size changes
+        const mediaQuery = window.matchMedia('(min-width: 1025px)');
+        mediaQuery.addListener((e) => {
+            this.isDesktop = e.matches;
+            this.handleResponsiveChange();
+        });
+    }
+    
+    handleResponsiveChange() {
+        if (this.isDesktop) {
+            // On desktop: ensure git main section content is visible, but subsections remain toggleable
+            const gitContent = document.getElementById('git-content');
+            if (gitContent) gitContent.style.display = 'block';
+        }
+        // On mobile: keep current toggle states as they are
+        // Note: Git subsections remain collapsible on both desktop and mobile
+    }
+
+    initializeDiffMode() {
+        const diffModeSpan = document.getElementById('diff-mode');
+        if (diffModeSpan) {
+            diffModeSpan.textContent = DIFF_VIEW_LABELS[this.currentDiffMode];
+        }
     }
 
     setupEventListeners() {
@@ -1834,6 +2255,11 @@ class GitChanges {
     }
 
     async toggleSection() {
+        // On desktop, main sections are not collapsible
+        if (this.isDesktop) {
+            return;
+        }
+        
         this.isExpanded = !this.isExpanded;
         const content = document.getElementById('git-content');
         const toggle = document.getElementById('git-toggle');
@@ -1852,6 +2278,7 @@ class GitChanges {
     }
 
     toggleSubsection(section) {
+        // Git subsections are collapsible on both desktop and mobile
         const toggle = document.getElementById(`${section}-toggle`);
         const content = document.getElementById(`${section}-content`);
         const icon = toggle.querySelector('.toggle-icon');
@@ -1906,8 +2333,8 @@ class GitChanges {
         this.gitFiles = status.files;
         
         // Categorize files into versioned and unversioned
-        const versionedFiles = status.files.filter(file => file.status !== 'untracked');
-        const unversionedFiles = status.files.filter(file => file.status === 'untracked');
+        const versionedFiles = status.files.filter(file => file.status !== GIT_STATUS.UNTRACKED);
+        const unversionedFiles = status.files.filter(file => file.status === GIT_STATUS.UNTRACKED);
         
         // Always update file counters
         this.updateFileCounters(versionedFiles.length, unversionedFiles.length, status.files.length);
@@ -1960,16 +2387,16 @@ class GitChanges {
         const deletions = file.deletions || 0;
         
         return `
-            <div class="git-file-item ${statusClass}" data-path="${file.path}" data-status="${file.status}">
+            <div class="git-file-item git-file-item--${statusClass}" data-path="${file.path}" data-status="${file.status}">
                 <div class="file-info">
                     <div class="file-status">
-                        <span class="status-icon" title="${file.status}">${statusIcon}</span>
+                        <span class="status-icon git-file-status--${statusClass}" title="${file.status}">${statusIcon}</span>
                     </div>
                     <div class="file-details">
                         <div class="file-path" title="${file.path}">${file.path}</div>
                         <div class="file-stats">
-                            ${additions > 0 ? `<span class="additions">+${additions}</span>` : ''}
-                            ${deletions > 0 ? `<span class="deletions">-${deletions}</span>` : ''}
+                            ${additions > 0 ? `<span class="additions git-file-additions">+${additions}</span>` : ''}
+                            ${deletions > 0 ? `<span class="deletions git-file-deletions">-${deletions}</span>` : ''}
                         </div>
                     </div>
                 </div>
@@ -1978,15 +2405,7 @@ class GitChanges {
     }
 
     getStatusIcon(status) {
-        const icons = {
-            'modified': '📝',
-            'added': '➕',
-            'deleted': '🗑️',
-            'renamed': '↔️',
-            'copied': '📋',
-            'untracked': '❓'
-        };
-        return icons[status] || '📄';
+        return GIT_STATUS_ICONS[status] || '📄';
     }
 
     attachFileEventListeners() {
@@ -2044,21 +2463,21 @@ class GitChanges {
         
         if (!toggleBtn || !diffModeSpan || !diffContent) return;
 
-        // Check current mode
-        const currentMode = diffModeSpan.textContent;
-        
-        if (currentMode === 'Inline View') {
+        // Toggle between modes using enum
+        if (this.currentDiffMode === DIFF_VIEW_MODE.INLINE) {
             // Switch to Final File View
-            diffModeSpan.textContent = 'Final File';
+            this.currentDiffMode = DIFF_VIEW_MODE.FINAL_FILE;
+            diffModeSpan.textContent = DIFF_VIEW_LABELS[DIFF_VIEW_MODE.FINAL_FILE];
             toggleBtn.textContent = '📋';
             toggleBtn.title = 'Show diff view';
             diffContent.classList.add('raw-view');
             diffContent.classList.remove('inline-diff');
         } else {
             // Switch to Inline View
-            diffModeSpan.textContent = 'Inline View';
+            this.currentDiffMode = DIFF_VIEW_MODE.INLINE;
+            diffModeSpan.textContent = DIFF_VIEW_LABELS[DIFF_VIEW_MODE.INLINE];
             toggleBtn.textContent = '📄';
-            toggleBtn.title = 'Show final file';
+            toggleBtn.title = 'Show file view';
             diffContent.classList.add('inline-diff');
             diffContent.classList.remove('raw-view');
         }
@@ -2085,13 +2504,12 @@ class GitChanges {
         if (diffFileName) diffFileName.textContent = filePath.split('/').pop();
         if (diffFilePath) diffFilePath.textContent = filePath;
         
-        // Check if we're in raw view mode
-        const diffModeSpan = document.getElementById('diff-mode');
-        const isRawView = diffModeSpan && diffModeSpan.textContent === 'Final File';
+        // Check if we're in final file view mode
+        const isRawView = this.currentDiffMode === DIFF_VIEW_MODE.FINAL_FILE;
         
         try {
             if (isRawView) {
-                // Fetch the final file content
+                // Fetch the final file content using the same API as file explorer
                 const response = await fetch(`/api/files/content?path=${encodeURIComponent(filePath)}`, {
                     headers: {
                         'Authorization': `Bearer ${window.CLAUDE_AUTH_TOKEN}`,
@@ -2103,8 +2521,8 @@ class GitChanges {
                     throw new Error(`HTTP ${response.status}`);
                 }
                 
-                const fileContent = await response.text();
-                this.renderFinalFile(fileContent);
+                const data = await response.json();
+                this.renderFinalFile(data.content);
             } else {
                 // Fetch the diff
                 const response = await fetch(`/api/git/file-diff?path=${encodeURIComponent(filePath)}&compare=working`, {
@@ -2183,9 +2601,16 @@ class GitChanges {
         
         if (!diffEditor) return;
         
-        // Display exactly like file explorer - pre > code structure
-        const escapedContent = this.escapeHtml(fileContent);
-        diffEditor.innerHTML = `<pre><code class="language-text">${escapedContent}</code></pre>`;
+        // Get file extension for syntax highlighting
+        const fileName = this.currentDiffFile || '';
+        const extension = fileName.split('.').pop() || '';
+        const language = this.getLanguageFromExtension(extension);
+        
+        // Apply syntax highlighting to raw content (escaping handled within highlighting)
+        const highlightedContent = this.applySyntaxHighlightingToText(fileContent, language);
+        
+        // Display with syntax highlighting
+        diffEditor.innerHTML = `<pre><code class="language-${language}">${highlightedContent}</code></pre>`;
     }
 
     createDiffLine(line) {
@@ -2208,6 +2633,117 @@ class GitChanges {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    getLanguageFromExtension(extension) {
+        const languageMap = {
+            'js': 'javascript',
+            'jsx': 'javascript', 
+            'ts': 'typescript',
+            'tsx': 'typescript',
+            'json': 'json',
+            'html': 'html',
+            'htm': 'html',
+            'css': 'css',
+            'scss': 'css',
+            'sass': 'css',
+            'py': 'python',
+            'java': 'java',
+            'cpp': 'cpp',
+            'c': 'c',
+            'h': 'c',
+            'hpp': 'cpp',
+            'sh': 'bash',
+            'bash': 'bash',
+            'zsh': 'bash',
+            'yml': 'yaml',
+            'yaml': 'yaml',
+            'xml': 'xml',
+            'md': 'markdown',
+            'txt': 'text',
+            'log': 'text'
+        };
+        
+        return languageMap[extension.toLowerCase()] || 'text';
+    }
+
+    applySyntaxHighlighting(element, language) {
+        // Basic syntax highlighting - in production you'd want a proper library
+        const content = element.textContent;
+        let highlightedContent = content;
+
+        // Basic highlighting for common languages
+        if (language === 'javascript' || language === 'typescript') {
+            highlightedContent = content
+                .replace(/\b(const|let|var|function|class|if|else|return|import|export|from|async|await|for|while|do|break|continue|switch|case|default|try|catch|finally|throw|new|this|super|extends|implements|interface|type|enum|namespace|public|private|protected|static|readonly)\b/g, '<span style="color: #569cd6;">$1</span>')
+                .replace(/(['"`])((?:\\.|(?!\1)[^\\])*?)\1/g, '<span style="color: #ce9178;">$&</span>')
+                .replace(/\/\/.*$/gm, '<span style="color: #6a9955;">$&</span>')
+                .replace(/\/\*[\s\S]*?\*\//g, '<span style="color: #6a9955;">$&</span>')
+                .replace(/\b(\d+\.?\d*)\b/g, '<span style="color: #b5cea8;">$1</span>');
+        } else if (language === 'json') {
+            highlightedContent = content
+                .replace(/("([^"\\]|\\.)*")(\s*:)/g, '<span style="color: #9cdcfe;">$1</span>$3')
+                .replace(/:\s*("([^"\\]|\\.)*")/g, ': <span style="color: #ce9178;">$1</span>')
+                .replace(/:\s*(\d+\.?\d*)/g, ': <span style="color: #b5cea8;">$1</span>')
+                .replace(/:\s*(true|false|null)/g, ': <span style="color: #569cd6;">$1</span>');
+        } else if (language === 'python') {
+            highlightedContent = content
+                .replace(/\b(def|class|if|elif|else|for|while|try|except|finally|with|as|import|from|return|yield|break|continue|pass|lambda|and|or|not|is|in|True|False|None)\b/g, '<span style="color: #569cd6;">$1</span>')
+                .replace(/(['"`])((?:\\.|(?!\1)[^\\])*?)\1/g, '<span style="color: #ce9178;">$&</span>')
+                .replace(/#.*$/gm, '<span style="color: #6a9955;">$&</span>')
+                .replace(/\b(\d+\.?\d*)\b/g, '<span style="color: #b5cea8;">$1</span>');
+        } else if (language === 'css') {
+            highlightedContent = content
+                .replace(/([.#]?[a-zA-Z-_]+)(\s*{)/g, '<span style="color: #d7ba7d;">$1</span>$2')
+                .replace(/([\w-]+)(\s*:)/g, '<span style="color: #9cdcfe;">$1</span>$2')
+                .replace(/:\s*([^;]+)/g, ': <span style="color: #ce9178;">$1</span>')
+                .replace(/\/\*[\s\S]*?\*\//g, '<span style="color: #6a9955;">$&</span>');
+        } else if (language === 'html') {
+            highlightedContent = content
+                .replace(/(&lt;\/?)([a-zA-Z][a-zA-Z0-9]*)(.*?)(&gt;)/g, '<span style="color: #569cd6;">$1</span><span style="color: #4ec9b0;">$2</span><span style="color: #92c5f8;">$3</span><span style="color: #569cd6;">$4</span>')
+                .replace(/([a-zA-Z-]+)(=)("[^"]*")/g, '<span style="color: #92c5f8;">$1</span>$2<span style="color: #ce9178;">$3</span>');
+        }
+
+        element.innerHTML = highlightedContent;
+    }
+
+    applySyntaxHighlightingToText(content, language) {
+        // First escape HTML characters to prevent XSS and display issues
+        let escapedContent = this.escapeHtml(content);
+
+        // Basic highlighting for common languages
+        if (language === 'javascript' || language === 'typescript') {
+            escapedContent = escapedContent
+                .replace(/\b(const|let|var|function|class|if|else|return|import|export|from|async|await|for|while|do|break|continue|switch|case|default|try|catch|finally|throw|new|this|super|extends|implements|interface|type|enum|namespace|public|private|protected|static|readonly)\b/g, '<span style="color: #569cd6;">$1</span>')
+                .replace(/(&#x27;|&quot;|`)([^&#x27;&quot;`]*?)\1/g, '<span style="color: #ce9178;">$&</span>')
+                .replace(/\/\/.*$/gm, '<span style="color: #6a9955;">$&</span>')
+                .replace(/\/\*[\s\S]*?\*\//g, '<span style="color: #6a9955;">$&</span>')
+                .replace(/\b(\d+\.?\d*)\b/g, '<span style="color: #b5cea8;">$1</span>');
+        } else if (language === 'json') {
+            escapedContent = escapedContent
+                .replace(/(&quot;[^&quot;]*&quot;)(\s*:)/g, '<span style="color: #9cdcfe;">$1</span>$2')
+                .replace(/:\s*(&quot;[^&quot;]*&quot;)/g, ': <span style="color: #ce9178;">$1</span>')
+                .replace(/:\s*(\d+\.?\d*)/g, ': <span style="color: #b5cea8;">$1</span>')
+                .replace(/:\s*(true|false|null)/g, ': <span style="color: #569cd6;">$1</span>');
+        } else if (language === 'python') {
+            escapedContent = escapedContent
+                .replace(/\b(def|class|if|elif|else|for|while|try|except|finally|with|as|import|from|return|yield|break|continue|pass|lambda|and|or|not|is|in|True|False|None)\b/g, '<span style="color: #569cd6;">$1</span>')
+                .replace(/(&#x27;|&quot;|`)([^&#x27;&quot;`]*?)\1/g, '<span style="color: #ce9178;">$&</span>')
+                .replace(/#.*$/gm, '<span style="color: #6a9955;">$&</span>')
+                .replace(/\b(\d+\.?\d*)\b/g, '<span style="color: #b5cea8;">$1</span>');
+        } else if (language === 'css') {
+            escapedContent = escapedContent
+                .replace(/([.#]?[a-zA-Z-_]+)(\s*\{)/g, '<span style="color: #d7ba7d;">$1</span>$2')
+                .replace(/([\w-]+)(\s*:)/g, '<span style="color: #9cdcfe;">$1</span>$2')
+                .replace(/:\s*([^;]+)/g, ': <span style="color: #ce9178;">$1</span>')
+                .replace(/\/\*[\s\S]*?\*\//g, '<span style="color: #6a9955;">$&</span>');
+        } else if (language === 'html') {
+            escapedContent = escapedContent
+                .replace(/(&lt;\/?)([a-zA-Z][a-zA-Z0-9]*)(.*?)(&gt;)/g, '<span style="color: #569cd6;">$1</span><span style="color: #4ec9b0;">$2</span><span style="color: #92c5f8;">$3</span><span style="color: #569cd6;">$4</span>')
+                .replace(/([a-zA-Z-]+)(=)(&quot;[^&quot;]*&quot;)/g, '<span style="color: #92c5f8;">$1</span>$2<span style="color: #ce9178;">$3</span>');
+        }
+
+        return escapedContent;
     }
 
     updateFileCounters(versionedCount, unversionedCount, totalCount) {
@@ -2239,12 +2775,25 @@ class GitChanges {
 
     showLoading() {
         const loading = document.getElementById('git-loading');
-        const files = document.getElementById('git-files');
+        const versionedSection = document.getElementById('versioned-section');
+        const unversionedSection = document.getElementById('unversioned-section');
         const clean = document.getElementById('git-clean');
         
-        if (loading) loading.style.display = 'flex';
-        if (files) files.style.display = 'none';
+        // Clear current content and show only loading
+        if (versionedSection) {
+            versionedSection.style.display = 'none';
+            const versionedFiles = document.getElementById('versioned-files');
+            if (versionedFiles) versionedFiles.innerHTML = '';
+        }
+        
+        if (unversionedSection) {
+            unversionedSection.style.display = 'none';
+            const unversionedFiles = document.getElementById('unversioned-files');
+            if (unversionedFiles) unversionedFiles.innerHTML = '';
+        }
+        
         if (clean) clean.style.display = 'none';
+        if (loading) loading.style.display = 'flex';
     }
 
     hideLoading() {

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
@@ -11,6 +12,7 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="manifest" href="manifest.json">
 </head>
+
 <body>
     <div class="mobile-app">
         <!-- Header -->
@@ -48,19 +50,19 @@
                     <span class="btn-text">Start</span>
                     <span class="btn-subtitle">Begin processing</span>
                 </button>
-                
+
                 <button class="action-btn action-btn--stop" id="stop-btn" data-action="stop">
                     <span class="btn-icon">⏹️</span>
                     <span class="btn-text">Stop</span>
                     <span class="btn-subtitle">Pause queue</span>
                 </button>
-                
+
                 <button class="action-btn action-btn--interrupt" id="interrupt-btn" data-action="interrupt">
                     <span class="btn-icon">⚠️</span>
                     <span class="btn-text">Interrupt</span>
                     <span class="btn-subtitle">Send ESC key</span>
                 </button>
-                
+
                 <button class="action-btn action-btn--reset" id="reset-btn" data-action="reset">
                     <span class="btn-icon">🔄</span>
                     <span class="btn-text">Reset</span>
@@ -79,13 +81,13 @@
                         <span class="toggle-icon">▼</span>
                     </button>
                 </header>
-                
+
                 <div class="section-content" id="queue-content">
                     <button class="add-message-btn" id="add-message-btn">
                         <span class="btn-icon">➕</span>
                         Add Message
                     </button>
-                    
+
                     <div class="queue-container" id="queue-container">
                         <!-- Queue items will be populated by JavaScript -->
                     </div>
@@ -99,9 +101,12 @@
                     <div class="output-controls">
                         <button class="control-btn" id="clear-output-btn" data-action="clear">Clear</button>
                         <button class="control-btn" id="scroll-lock-btn" data-action="scroll-lock">📌</button>
+                        <button class="section-toggle" id="output-toggle" data-expanded="true">
+                            <span class="toggle-icon">▼</span>
+                        </button>
                     </div>
                 </header>
-                
+
                 <div class="section-content" id="output-content">
                     <div class="output-container">
                         <div class="output-stream" id="claude-output">
@@ -123,11 +128,16 @@
                         <span class="file-counter" id="file-counter" data-count="0">0 files</span>
                     </h2>
                     <div class="explorer-controls">
-                        <button class="control-btn" id="refresh-files" data-action="refresh" title="Refresh file tree">🔄</button>
-                        <button class="control-btn" id="search-files" data-action="search" title="Search in files">🔍</button>
+                        <button class="control-btn" id="refresh-files" data-action="refresh"
+                            title="Refresh file tree">🔄</button>
+                        <button class="control-btn" id="search-files" data-action="search"
+                            title="Search in files">🔍</button>
+                        <button class="section-toggle" id="explorer-toggle" data-expanded="true">
+                            <span class="toggle-icon">▼</span>
+                        </button>
                     </div>
                 </header>
-                
+
                 <div class="section-content" id="explorer-content">
                     <div class="file-tree-container">
                         <div class="file-tree-loading" id="file-tree-loading" style="display: none;">
@@ -154,9 +164,12 @@
                     </h2>
                     <div class="git-controls">
                         <button class="control-btn" id="refresh-git" title="Refresh git status">🔄</button>
+                        <button class="section-toggle" id="git-toggle" data-expanded="true">
+                            <span class="toggle-icon">▼</span>
+                        </button>
                     </div>
                 </header>
-                
+
                 <div class="section-content" id="git-content">
                     <!-- Git Loading -->
                     <div class="git-loading" id="git-loading" style="display: none;">
@@ -221,11 +234,7 @@
                 <button class="modal-close" id="close-add-modal">&times;</button>
             </div>
             <div class="modal-body">
-                <textarea 
-                    id="message-input" 
-                    placeholder="Enter your message for Claude..."
-                    rows="4"
-                ></textarea>
+                <textarea id="message-input" placeholder="Enter your message for Claude..." rows="4"></textarea>
             </div>
             <div class="modal-footer">
                 <button class="btn btn--secondary" id="cancel-add-message">Cancel</button>
@@ -242,11 +251,7 @@
                 <button class="modal-close" id="close-edit-modal">&times;</button>
             </div>
             <div class="modal-body">
-                <textarea 
-                    id="edit-message-input" 
-                    placeholder="Edit your message..."
-                    rows="4"
-                ></textarea>
+                <textarea id="edit-message-input" placeholder="Edit your message..." rows="4"></textarea>
             </div>
             <div class="modal-footer">
                 <button class="btn btn--secondary" id="cancel-edit-message">Cancel</button>
@@ -339,6 +344,11 @@
             <div class="modal-header">
                 <h4 id="diff-file-name">File View</h4>
                 <div class="diff-controls">
+                    <div class="diff-stats-header">
+                        <span class="stat-item additions" id="diff-additions">+0</span>
+                        <span class="stat-item deletions" id="diff-deletions">-0</span>
+                        <span class="stat-item" id="diff-mode">Diff View</span>
+                    </div>
                     <button class="control-btn" id="toggle-diff-mode" title="Toggle diff view">📄</button>
                     <button class="modal-close" id="close-diff">&times;</button>
                 </div>
@@ -349,21 +359,15 @@
                         <div class="loading-spinner"></div>
                         <span class="loading-text">Loading file...</span>
                     </div>
-                    
-                    <!-- Diff Stats -->
-                    <div class="diff-stats" id="diff-stats">
-                        <span class="stat-item additions" id="diff-additions">+0</span>
-                        <span class="stat-item deletions" id="diff-deletions">-0</span>
-                        <span class="stat-item" id="diff-mode">Inline View</span>
-                    </div>
-                    
+
+
                     <!-- Inline Diff Content -->
                     <div class="diff-content inline-diff" id="diff-content">
                         <div class="diff-editor" id="diff-editor">
                             <!-- Inline diff with line numbers populated by JavaScript -->
                         </div>
                     </div>
-                    
+
                     <div class="diff-error" id="diff-error" style="display: none;">
                         <span class="error-icon">⚠️</span>
                         <span class="error-text">Failed to load file</span>
@@ -390,4 +394,5 @@
 
     <script src="script.js"></script>
 </body>
+
 </html>

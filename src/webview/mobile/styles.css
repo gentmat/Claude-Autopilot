@@ -213,13 +213,30 @@ body {
   transition: background-color var(--transition-fast);
 }
 
-.connection-status[data-status="connected"] .status-dot {
+.connection-status[data-status="connected"] .status-dot,
+#connection-indicator[data-status="connected"] .status-dot {
   background-color: var(--success-green);
 }
 
-.connection-status[data-status="reconnecting"] .status-dot {
+.connection-status[data-status="reconnecting"] .status-dot,
+#connection-indicator[data-status="reconnecting"] .status-dot {
   background-color: var(--warning-orange);
   animation: pulse 1s infinite;
+}
+
+.connection-status[data-status="error"] .status-dot,
+#connection-indicator[data-status="error"] .status-dot {
+  background-color: var(--danger-red);
+}
+
+.connection-status[data-status="connecting"] .status-dot,
+#connection-indicator[data-status="connecting"] .status-dot {
+  background-color: var(--warning-orange);
+}
+
+.connection-status[data-status="disconnected"] .status-dot,
+#connection-indicator[data-status="disconnected"] .status-dot {
+  background-color: var(--danger-red);
 }
 
 .session-status {
@@ -903,6 +920,21 @@ textarea::placeholder {
     max-width: 1200px;
     margin: 0 auto;
   }
+  
+  /* Hide main section toggle buttons on desktop, but keep git subsection toggles */
+  .section-toggle {
+    display: none !important;
+  }
+  
+  /* Ensure main section content is always visible on desktop */
+  .section-content {
+    display: block !important;
+  }
+  
+  /* Git subsections remain collapsible on desktop */
+  .subsection-title {
+    cursor: pointer !important;
+  }
 }
 
 /* Dark mode support (default) */
@@ -1158,6 +1190,26 @@ textarea::placeholder {
 .file-item.directory .file-name {
   color: var(--text-secondary);
   font-weight: 500;
+}
+
+/* Loading indicator for file explorer */
+.file-item.loading-indicator {
+  background-color: rgba(255, 255, 255, 0.02);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.file-item.loading-indicator .file-name {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.file-item.loading-indicator .file-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.8; }
 }
 
 .file-meta {
@@ -1466,6 +1518,10 @@ textarea::placeholder {
   .search-filters select {
     margin-bottom: var(--space-sm);
   }
+
+  .file-explorer-section {
+    margin-bottom: inherit;
+  }
 }
 
 /* ===== GIT CHANGES SECTION ===== */
@@ -1557,6 +1613,27 @@ textarea::placeholder {
   min-height: 24px;
 }
 
+/* Git file status colors */
+.git-file-item--modified {
+  border-left: 3px solid var(--warning-orange);
+}
+
+.git-file-item--added {
+  border-left: 3px solid var(--success-green);
+}
+
+.git-file-item--deleted {
+  border-left: 3px solid var(--danger-red);
+}
+
+.git-file-item--renamed {
+  border-left: 3px solid var(--info-cyan);
+}
+
+.git-file-item--untracked {
+  border-left: 3px solid var(--text-muted);
+}
+
 .git-file-item:hover, .git-file-item:focus, .git-file-item.focused {
   background-color: rgba(255,255,255,0.05);
   outline: 1px solid var(--primary-blue);
@@ -1586,28 +1663,23 @@ textarea::placeholder {
 }
 
 .git-file-status--modified {
-  background: var(--warning-orange);
-  color: white;
+  color: var(--warning-orange);
 }
 
 .git-file-status--added {
-  background: var(--success-green);
-  color: white;
+  color: var(--success-green);
 }
 
 .git-file-status--deleted {
-  background: var(--danger-red);
-  color: white;
+  color: var(--danger-red);
 }
 
 .git-file-status--renamed {
-  background: var(--info-cyan);
-  color: white;
+  color: var(--info-cyan);
 }
 
 .git-file-status--untracked {
-  background: var(--text-muted);
-  color: white;
+  color: var(--text-muted);
 }
 
 .git-file-info {
@@ -1883,6 +1955,22 @@ textarea::placeholder {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+}
+
+.diff-stats-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-right: var(--space-sm);
+}
+
+.diff-stats-header .stat-item {
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
 }
 
 .compare-select {
@@ -2439,7 +2527,6 @@ textarea::placeholder {
 .file-explorer-section .section-content {
   padding: 0;
   max-height: 400px;
-  overflow-y: auto;
 }
 
 .git-subsection {
