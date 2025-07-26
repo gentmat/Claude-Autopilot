@@ -892,7 +892,7 @@ export class MobileServer {
             running: this.isServerRunning,
             url: this.getServerUrl(),
             isExternal: this.useExternalServer,
-            hasPassword: !!this.webPassword,
+            hasPassword: this.useExternalServer && !!this.webPassword, // Only external servers use password protection
             blockedIPs: this.blockedIPs.size
         };
     }

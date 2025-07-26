@@ -688,7 +688,7 @@ export function activate(context: vscode.ExtensionContext) {
                             <div class="status">
                                 ✅ Web server is running<br>
                                 🌍 ${serverStatus.isExternal ? 'External server (ngrok)' : 'Local network'}<br>
-                                ${serverStatus.hasPassword ? '🔒 Password protected' : '🔓 No password required'}<br>
+                                ${serverStatus.hasPassword ? '🔒 Password protected (external tunnel)' : '🔓 No password (local network only)'}<br>
                                 ${serverStatus.blockedIPs > 0 ? `🚫 ${serverStatus.blockedIPs} blocked IPs` : ''}
                             </div>
                             
