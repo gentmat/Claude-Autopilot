@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { MessageItem } from '../../core/types';
-import { messageQueue, claudeProcess, sessionReady, processingQueue, currentMessage, setCurrentMessage, setProcessingQueue } from '../../core/state';
+import { messageQueue, claudeProcess, sessionReady, processingQueue, currentMessage, setCurrentMessage, setProcessingQueue, setIsRunning } from '../../core/state';
 import { debugLog } from '../../utils/logging';
 import { getErrorMessage } from '../../utils/error-handler';
 import { updateWebviewContent, updateSessionState } from '../../ui/webview';
@@ -41,13 +41,32 @@ export async function processNextMessage(): Promise<void> {
         debugLog('❌ Claude process not available');
         vscode.window.showWarningMessage('Claude session not started. Please start Claude session first.');
         setProcessingQueue(false);
+        setIsRunning(false);
         return;
     }
 
     if (!sessionReady) {
-        debugLog('❌ Claude session not ready');
-        vscode.window.showWarningMessage('Claude session not ready. Please wait for Claude to be ready first.');
-        setProcessingQueue(false);
+        debugLog('❌ Claude session not ready - waiting for session to become ready...');
+        
+        // Wait for session to become ready instead of stopping processing
+        const waitForReady = setInterval(() => {
+            if (sessionReady) {
+                clearInterval(waitForReady);
+                processNextMessage();
+            }
+        }, 1000);
+        
+        // Timeout after 30 seconds
+        setTimeout(() => {
+            clearInterval(waitForReady);
+            if (!sessionReady) {
+                debugLog('❌ Timeout waiting for session to be ready');
+                vscode.window.showWarningMessage('Claude session failed to become ready. Please restart the session.');
+                setProcessingQueue(false);
+                setIsRunning(false);
+            }
+        }, 30000);
+        
         return;
     }
 
@@ -385,6 +404,7 @@ export async function startProcessingQueue(skipPermissions: boolean = true): Pro
                 if (sessionReady) {
                     clearInterval(checkReadyInterval);
                     setProcessingQueue(true);
+                    setIsRunning(true);
                     updateSessionState();
                     processNextMessage();
                 }
@@ -401,12 +421,11 @@ export async function startProcessingQueue(skipPermissions: boolean = true): Pro
         return;
     }
 
-    debugLog(`🔄 Setting processingQueue to true, current queue length: ${messageQueue.length}`);
     setProcessingQueue(true);
+    setIsRunning(true);
     updateSessionState();
     
     if (messageQueue.length === 0) {
-        debugLog('📭 Queue is empty after starting processing - waiting for messages');
         vscode.window.showInformationMessage('Claude session is ready. Add messages to start processing.');
         return;
     }
@@ -416,6 +435,7 @@ export async function startProcessingQueue(skipPermissions: boolean = true): Pro
 
 export function stopProcessingQueue(): void {
     setProcessingQueue(false);
+    setIsRunning(false);
     setCurrentMessage(null);
     
     if (claudeProcess && claudeProcess.stdin) {

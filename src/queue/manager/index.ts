@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { MessageItem } from '../../core/types';
-import { messageQueue, queueSortConfig, claudePanel, setQueueSortConfig, processingQueue, sessionReady, setProcessingQueue } from '../../core/state';
+import { messageQueue, queueSortConfig, claudePanel, setQueueSortConfig, processingQueue, sessionReady, setProcessingQueue, setIsRunning } from '../../core/state';
 import { debugLog } from '../../utils/logging';
 import { updateWebviewContent } from '../../ui/webview';
 import { processNextMessage } from '../../claude/communication';
@@ -180,6 +180,7 @@ function tryAutoStartProcessing(): void {
         if (!processingQueue) {
             debugLog('🚀 Auto-enabling processing for first message in ready session');
             setProcessingQueue(true);
+            setIsRunning(true);
         }
         debugLog('🚀 Auto-starting queue processing - conditions met');
         setTimeout(() => {

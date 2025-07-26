@@ -109,8 +109,13 @@ export class APIRoutes {
         // Control APIs
         app.post('/api/control/start', async (req: Request, res: Response) => {
             try {
-                await startProcessingQueue();
-                res.json({ success: true, message: 'Processing started' });
+                // Use same logic as extension interface - check isRunning first
+                if (!isRunning) {
+                    await startProcessingQueue();
+                    res.json({ success: true, message: 'Processing started' });
+                } else {
+                    res.json({ success: true, message: 'Processing already running' });
+                }
             } catch (error) {
                 console.error('Error starting processing:', error);
                 res.status(500).json({ error: 'Failed to start processing' });
