@@ -490,6 +490,24 @@ export class MobileServer {
             }
         });
 
+        // Workspace files search API
+        this.app.get('/api/files/search', async (req: Request, res: Response) => {
+            try {
+                console.log('Search API called with query:', req.query.query);
+                const query = req.query.query as string || '';
+                const page = parseInt(req.query.page as string) || 1;
+                const pageSize = parseInt(req.query.pageSize as string) || 50;
+                
+                console.log('Calling searchWorkspaceFiles...');
+                const result = await this.searchWorkspaceFiles(query, page, pageSize);
+                console.log('Search result:', result);
+                res.json(result);
+            } catch (error) {
+                console.error('Error searching workspace files:', error);
+                res.status(500).json({ error: 'Failed to search workspace files' });
+            }
+        });
+
         this.app.get('/api/files/content', (req: Request, res: Response) => {
             try {
                 const filePath = req.query.path as string;
@@ -917,6 +935,68 @@ export class MobileServer {
     public getAuthToken(): string {
         return this.authToken;
     }
+
+    private async searchWorkspaceFiles(query: string, page: number = 1, pageSize: number = 50) {
+        console.log('searchWorkspaceFiles called with:', { query, page, pageSize });
+        const vscode = await import('vscode');
+        const path = await import('path');
+        
+        try {
+            console.log('Starting VSCode workspace search');
+            // Use VSCode's built-in workspace search like the main extension
+            const excludePattern = '{**/node_modules/**,**/dist/**,**/build/**,**/out/**,**/.git/**,**/coverage/**,**/.nyc_output/**,**/logs/**,**/tmp/**,**/temp/**}';
+            
+            let files: vscode.Uri[];
+            if (query) {
+                const [queryFiles, queryDirs] = await Promise.all([
+                    vscode.workspace.findFiles(`**/*${query}*`, excludePattern, 500),
+                    vscode.workspace.findFiles(`**/*${query}*/**`, excludePattern, 500)
+                ]);
+                files = [...queryFiles, ...queryDirs];
+            } else {
+                files = await vscode.workspace.findFiles('**/*', excludePattern, 1000);
+            }
+            console.log('Found files:', files.length);
+            
+            let results = files.map(file => ({
+                path: vscode.workspace.asRelativePath(file),
+                name: path.basename(file.fsPath)
+            }))
+            .filter((file, index, self) => index === self.findIndex(f => f.path === file.path))
+            .sort((a, b) => {
+                // Sort by relevance: exact matches first, then by name length, then alphabetically
+                if (query) {
+                    const aExact = a.name.toLowerCase() === query.toLowerCase();
+                    const bExact = b.name.toLowerCase() === query.toLowerCase();
+                    if (aExact && !bExact) return -1;
+                    if (!aExact && bExact) return 1;
+                    
+                    const aIncludes = a.name.toLowerCase().includes(query.toLowerCase());
+                    const bIncludes = b.name.toLowerCase().includes(query.toLowerCase());
+                    if (aIncludes && !bIncludes) return -1;
+                    if (!aIncludes && bIncludes) return 1;
+                }
+                return a.path.localeCompare(b.path);
+            });
+
+            // Implement pagination
+            const startIndex = (page - 1) * pageSize;
+            const endIndex = startIndex + pageSize;
+            const paginatedFiles = results.slice(startIndex, endIndex);
+
+            return {
+                files: paginatedFiles,
+                total: results.length,
+                page,
+                pageSize,
+                totalPages: Math.ceil(results.length / pageSize)
+            };
+        } catch (error) {
+            console.error('Error searching files:', error);
+            throw error;
+        }
+    }
+
 
     public isRunning(): boolean {
         return this.isServerRunning;

@@ -1180,8 +1180,6 @@ textarea::placeholder {
 
 .file-name {
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-primary);
   font-weight: 400;
@@ -1392,22 +1390,58 @@ textarea::placeholder {
 
 .search-form input {
   width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color var(--transition-fast);
   margin-bottom: var(--space-sm);
+}
+
+.search-form input:focus {
+  border-color: var(--primary-blue);
+}
+
+.search-form input::placeholder {
+  color: var(--text-muted);
 }
 
 .search-filters {
   display: flex;
   gap: var(--space-sm);
-  align-items: center;
+  align-items: stretch;
 }
 
 .search-filters select {
   flex: 1;
-  padding: var(--space-sm);
-  border: 1px solid var(--border-color);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--bg-tertiary);
   border-radius: var(--radius-md);
-  background: var(--bg-primary);
   color: var(--text-primary);
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color var(--transition-fast);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23969696' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right var(--space-sm) center;
+  background-repeat: no-repeat;
+  background-size: 16px;
+  padding-right: calc(var(--space-md) + 20px);
+}
+
+.search-filters select:focus {
+  border-color: var(--primary-blue);
+}
+
+.search-filters .action-btn {
+  min-height: auto;
+  height: 40px;
+  padding: var(--space-sm) var(--space-md);
+  min-width: 80px;
   font-size: 0.9rem;
 }
 
@@ -1425,11 +1459,25 @@ textarea::placeholder {
   background: var(--bg-primary);
 }
 
-.search-result-item {
-  padding: var(--space-sm);
-  border-bottom: 1px solid var(--border-color);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
+/* Search results use file-item styling */
+.file-item.search-result {
+  border-left: 3px solid var(--primary-blue);
+}
+
+.file-item.search-result .file-meta {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-family: 'SF Mono', Monaco, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.file-item.search-result .file-name {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .search-result-item:hover {
@@ -1454,6 +1502,48 @@ textarea::placeholder {
 .search-result-line {
   color: var(--text-muted);
   font-size: 0.75rem;
+}
+
+.search-result-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-sm);
+  border-bottom: 1px solid var(--border-color);
+  transition: background-color var(--transition-fast);
+}
+
+.search-result-item:hover {
+  background-color: rgba(255,255,255,0.05);
+}
+
+.search-result-info {
+  flex: 1;
+}
+
+.search-result-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  margin-bottom: 2px;
+}
+
+.search-result-path {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-family: 'SF Mono', Monaco, monospace;
+}
+
+.search-result-actions {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.search-result-actions .action-btn {
+  min-width: 32px;
+  height: 32px;
+  padding: 4px;
+  font-size: 0.9rem;
 }
 
 .search-highlight {

@@ -1888,11 +1888,27 @@ class FileExplorer {
         
         this.showSearchLoading(true);
         
-        // For now, show a placeholder - full search implementation would go here
-        setTimeout(() => {
+        try {
+            const response = await fetch(`/api/files/search?query=${encodeURIComponent(query)}&pageSize=100`, {
+                headers: {
+                    'Authorization': `Bearer ${window.CLAUDE_AUTH_TOKEN}`,
+                    'x-session-token': this.getSessionToken()
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error('Search request failed');
+            }
+            
+            const result = await response.json();
+            this.showSearchResults(result.files);
+            
+        } catch (error) {
+            console.error('Search error:', error);
+            this.showToast('Search failed. Please try again.');
+        } finally {
             this.showSearchLoading(false);
-            this.showSearchResults([]);
-        }, 1000);
+        }
     }
 
     showSearchLoading(show) {
@@ -1924,6 +1940,42 @@ class FileExplorer {
             const item = this.createSearchResultItem(result);
             container.appendChild(item);
         });
+    }
+
+    createSearchResultItem(file) {
+        const item = document.createElement('div');
+        item.className = 'file-item search-result';
+        item.setAttribute('data-path', file.path);
+        item.setAttribute('data-type', 'file');
+        
+        // No indent for search results
+        const indent = document.createElement('div');
+        indent.className = 'file-indent';
+        indent.style.width = '0px';
+        
+        const icon = document.createElement('div');
+        icon.className = 'file-icon';
+        icon.textContent = this.getFileIcon({ name: file.name, type: 'file', path: file.path });
+        
+        const name = document.createElement('div');
+        name.className = 'file-name';
+        name.textContent = file.name;
+        
+        const meta = document.createElement('div');
+        meta.className = 'file-meta';
+        meta.textContent = file.path;
+        
+        item.appendChild(indent);
+        item.appendChild(icon);
+        item.appendChild(name);
+        item.appendChild(meta);
+        
+        item.addEventListener('click', () => {
+            this.closeSearch();
+            this.previewFile(file.path);
+        });
+        
+        return item;
     }
 
     // Utility methods

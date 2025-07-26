@@ -166,6 +166,21 @@ export class APIRoutes {
             this.fileExplorer.handleFileContent(req, res);
         });
 
+        // Workspace files search API
+        app.get('/api/files/search', async (req: Request, res: Response) => {
+            try {
+                const query = req.query.query as string || '';
+                const page = parseInt(req.query.page as string) || 1;
+                const pageSize = parseInt(req.query.pageSize as string) || 50;
+                
+                const result = await this.searchWorkspaceFiles(query, page, pageSize);
+                res.json(result);
+            } catch (error) {
+                console.error('Error searching workspace files:', error);
+                res.status(500).json({ error: 'Failed to search workspace files' });
+            }
+        });
+
         // Git APIs
         app.get('/api/git/status', async (req: Request, res: Response) => {
             try {
@@ -267,5 +282,101 @@ export class APIRoutes {
                 reject(error);
             });
         });
+    }
+
+    private async searchWorkspaceFiles(query: string, page: number = 1, pageSize: number = 50) {
+        const fs = await import('fs/promises');
+        const path = await import('path');
+        
+        try {
+            // Use a simple recursive file search instead of glob
+            const files = await this.findFiles(process.cwd(), query);
+            
+            let results = files.map(file => ({
+                path: path.relative(process.cwd(), file),
+                name: path.basename(file)
+            }))
+            .filter((file, index, self) => index === self.findIndex(f => f.path === file.path))
+            .sort((a, b) => {
+                // Sort by relevance: exact matches first, then by name length, then alphabetically
+                if (query) {
+                    const aExact = a.name.toLowerCase() === query.toLowerCase();
+                    const bExact = b.name.toLowerCase() === query.toLowerCase();
+                    if (aExact && !bExact) return -1;
+                    if (!aExact && bExact) return 1;
+                    
+                    const aIncludes = a.name.toLowerCase().includes(query.toLowerCase());
+                    const bIncludes = b.name.toLowerCase().includes(query.toLowerCase());
+                    if (aIncludes && !bIncludes) return -1;
+                    if (!aIncludes && bIncludes) return 1;
+                }
+                return a.path.localeCompare(b.path);
+            });
+
+            // Implement pagination
+            const startIndex = (page - 1) * pageSize;
+            const endIndex = startIndex + pageSize;
+            const paginatedFiles = results.slice(startIndex, endIndex);
+
+            return {
+                files: paginatedFiles,
+                query: query,
+                pagination: {
+                    page: page,
+                    pageSize: pageSize,
+                    total: results.length,
+                    totalPages: Math.ceil(results.length / pageSize),
+                    hasMore: endIndex < results.length
+                }
+            };
+        } catch (error) {
+            throw new Error(`Failed to search workspace files: ${error}`);
+        }
+    }
+
+    private async findFiles(dir: string, query: string): Promise<string[]> {
+        const fs = await import('fs/promises');
+        const path = await import('path');
+        
+        const excludeDirs = ['node_modules', '.git', 'dist', 'build', 'out', '.next', '.vscode', 'coverage', '.nyc_output', 'logs', 'tmp', 'temp'];
+        const excludeFiles = ['.env', '.DS_Store', 'Thumbs.db', 'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml'];
+        
+        async function search(currentDir: string, depth: number = 0): Promise<string[]> {
+            if (depth > 10) return []; // Limit depth
+            
+            try {
+                const entries = await fs.readdir(currentDir, { withFileTypes: true });
+                const files: string[] = [];
+                
+                for (const entry of entries) {
+                    const fullPath = path.join(currentDir, entry.name);
+                    
+                    if (entry.isDirectory()) {
+                        if (!excludeDirs.includes(entry.name) && !entry.name.startsWith('.')) {
+                            const subFiles = await search(fullPath, depth + 1);
+                            files.push(...subFiles);
+                        }
+                    } else if (entry.isFile()) {
+                        const shouldExclude = excludeFiles.some(exclude => entry.name.includes(exclude)) ||
+                                            entry.name.endsWith('.min.js') ||
+                                            entry.name.endsWith('.bundle.js') ||
+                                            entry.name.endsWith('.chunk.js') ||
+                                            entry.name.endsWith('.log');
+                        
+                        if (!shouldExclude) {
+                            if (!query || entry.name.toLowerCase().includes(query.toLowerCase())) {
+                                files.push(fullPath);
+                            }
+                        }
+                    }
+                }
+                
+                return files;
+            } catch (error) {
+                return []; // Skip directories we can't read
+            }
+        }
+        
+        return search(dir);
     }
 }
