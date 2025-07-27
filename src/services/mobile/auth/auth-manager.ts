@@ -50,7 +50,7 @@ export class AuthManager {
                 return next();
             }
 
-            const sessionToken = req.headers['x-session-token'] as string || (req as any).cookies?.sessionToken;
+            const sessionToken = (req as any).cookies?.sessionToken;
             
             if (!sessionToken || !this.activeSessions.has(sessionToken)) {
                 const attempts = this.passwordAttempts.get(clientIP) || 0;
@@ -83,7 +83,7 @@ export class AuthManager {
 
     public checkPasswordForStaticFiles(req: Request, res: Response): boolean {
         if (this.config.useExternalServer && this.config.webPassword) {
-            const sessionToken = req.headers['x-session-token'] as string || (req as any).cookies?.sessionToken;
+            const sessionToken = (req as any).cookies?.sessionToken;
             const clientIP = req.ip || req.connection.remoteAddress || 'unknown';
             
             if (!sessionToken || !this.activeSessions.has(sessionToken)) {

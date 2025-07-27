@@ -1,7 +1,7 @@
 import { claudePanel, claudeOutputBuffer, claudeCurrentScreen, claudeOutputTimer, claudeAutoClearTimer, lastClaudeOutputTime, setClaudeOutputBuffer, setClaudeCurrentScreen, setClaudeOutputTimer, setClaudeAutoClearTimer, setLastClaudeOutputTime } from '../../core/state';
 import { CLAUDE_OUTPUT_THROTTLE_MS, CLAUDE_OUTPUT_AUTO_CLEAR_MS, CLAUDE_OUTPUT_MAX_BUFFER_SIZE, ANSI_CLEAR_SCREEN_PATTERNS } from '../../core/constants';
 import { debugLog, formatTerminalOutput, sendToWebviewTerminal } from '../../utils/logging';
-import { getMobileServer } from '../../services/mobile/server';
+import { getMobileServer } from '../../services/mobile/index';
 
 export function sendClaudeOutput(output: string): void {
     setClaudeOutputBuffer(claudeOutputBuffer + output);

@@ -146,3 +146,12 @@ export class MobileServer {
         this.webSocketManager.notifyOutputUpdate();
     }
 }
+
+let server: MobileServer | null = null;
+
+export function getMobileServer() {
+    if (!server) {
+        server = new MobileServer();
+    }
+    return server;
+}

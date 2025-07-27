@@ -7,7 +7,7 @@ import { updateWebviewContent, updateSessionState } from '../../ui/webview';
 import { saveWorkspaceHistory, ensureHistoryRun, updateMessageStatusInHistory } from '../../queue/processor/history';
 import { TIMEOUT_MS, ANSI_CLEAR_SCREEN_PATTERNS } from '../../core/constants';
 import { startClaudeSession } from '../../claude/session';
-import { getMobileServer } from '../../services/mobile/server';
+import { getMobileServer } from '../../services/mobile/index';
 
 export async function processNextMessage(): Promise<void> {
     debugLog('--- PROCESSING NEXT MESSAGE ---');

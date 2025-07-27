@@ -17,7 +17,7 @@ import { sendSecuritySettings, toggleXssbypassSetting } from './services/securit
 import { debugLog } from './utils';
 import { showError, showInfo, showWarning, showInput, Messages, showErrorFromException } from './utils/notifications';
 import { runDependencyCheck, showDependencyStatus } from './services/dependency-check/main';
-import {getMobileServer} from "./services/mobile/server";
+import {getMobileServer} from "./services/mobile/index";
 
 let configWatcher: vscode.Disposable | undefined;
 
