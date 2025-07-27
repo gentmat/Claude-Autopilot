@@ -5,7 +5,7 @@ import { Request, Response } from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as vscode from 'vscode';
-import { MAX_FILE_SIZE } from '../../core/constants/timeouts';
+import { MAX_FILE_SIZE } from '../../../core/constants/timeouts';
 
 export interface FileTreeNode {
     name: string;
@@ -17,12 +17,12 @@ export interface FileTreeNode {
 }
 
 export class FileExplorer {
-    private getWorkspaceRoot(): string | null {
+    getWorkspaceRoot(): string | null {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         return workspaceFolders && workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : null;
     }
 
-    private validateAndResolvePath(workspaceRoot: string, requestPath: string): string | null {
+    validateAndResolvePath(workspaceRoot: string, requestPath: string): string | null {
         try {
             // Normalize and resolve the path
             const resolvedPath = path.resolve(workspaceRoot, requestPath || '.');
@@ -40,53 +40,70 @@ export class FileExplorer {
         }
     }
 
-    buildFileTree(dirPath: string, maxDepth: number = 3, currentDepth: number = 0): FileTreeNode[] {
+    buildFileTree(dirPath: string, maxDepth: number = 3, currentDepth: number = 0): any[] {
+        if (currentDepth >= maxDepth) {
+            return [];
+        }
+
+        const items: any[] = [];
+        const ignorePatterns = [
+            '.git', '.vscode', 'node_modules', '.DS_Store', 'Thumbs.db',
+            '.gitignore', '.vscodeignore', 'out', 'dist', 'build', '.cache',
+            '__pycache__', '*.pyc', '.env', '.env.local', '.next', 'coverage'
+        ];
+
         try {
-            if (currentDepth >= maxDepth) {
-                return [];
-            }
+            const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+            
+            // Separate directories and files
+            const directories = entries.filter(entry => entry.isDirectory());
+            const files = entries.filter(entry => entry.isFile());
+            
+            // Sort directories first, then files
+            const sortedEntries = [
+                ...directories.sort((a, b) => a.name.localeCompare(b.name)),
+                ...files.sort((a, b) => a.name.localeCompare(b.name))
+            ];
 
-            const items = fs.readdirSync(dirPath);
-            const result: FileTreeNode[] = [];
-
-            for (const item of items) {
-                // Skip hidden files and common ignore patterns
-                if (item.startsWith('.') || item === 'node_modules' || item === 'dist' || item === 'build') {
+            for (const entry of sortedEntries) {
+                // Skip ignored patterns
+                if (this.shouldIgnoreFile(entry.name, ignorePatterns)) {
                     continue;
                 }
 
-                const itemPath = path.join(dirPath, item);
-                const stats = fs.statSync(itemPath);
-                const relativePath = path.relative(this.getWorkspaceRoot() || '', itemPath);
+                const fullPath = path.join(dirPath, entry.name);
+                const stats = fs.statSync(fullPath);
+                const relativePath = path.relative(this.getWorkspaceRoot() || '', fullPath);
 
-                const node: FileTreeNode = {
-                    name: item,
-                    path: relativePath,
-                    isDirectory: stats.isDirectory(),
-                    size: stats.isDirectory() ? undefined : stats.size,
-                    modified: stats.mtime.toISOString()
-                };
-
-                if (stats.isDirectory()) {
-                    node.children = this.buildFileTree(itemPath, maxDepth, currentDepth + 1);
+                if (entry.isDirectory()) {
+                    const item = {
+                        name: entry.name,
+                        type: 'directory',
+                        path: '/' + relativePath.replace(/\\/g, '/'),
+                        children: currentDepth < maxDepth - 1 ? this.buildFileTree(fullPath, maxDepth, currentDepth + 1) : [],
+                        expanded: false,
+                        size: 0,
+                        modified: stats.mtime.toISOString()
+                    };
+                    items.push(item);
+                } else {
+                    const extension = path.extname(entry.name).toLowerCase();
+                    const item = {
+                        name: entry.name,
+                        type: 'file',
+                        path: '/' + relativePath.replace(/\\/g, '/'),
+                        size: stats.size,
+                        modified: stats.mtime.toISOString(),
+                        extension: extension
+                    };
+                    items.push(item);
                 }
-
-                result.push(node);
             }
-
-            // Sort: directories first, then files, both alphabetically
-            result.sort((a, b) => {
-                if (a.isDirectory !== b.isDirectory) {
-                    return a.isDirectory ? -1 : 1;
-                }
-                return a.name.localeCompare(b.name);
-            });
-
-            return result;
         } catch (error) {
-            console.error('Error building file tree:', error);
-            return [];
+            console.error(`Error reading directory ${dirPath}:`, error);
         }
+
+        return items;
     }
 
     handleFileExplorer(req: Request, res: Response) {
@@ -201,5 +218,40 @@ export class FileExplorer {
             '.rb': 'ruby'
         };
         return languageMap[ext] || 'text';
+    }
+
+    countItems(items: any[]): number {
+        let count = 0;
+        for (const item of items) {
+            count++;
+            if (item.children && Array.isArray(item.children)) {
+                count += this.countItems(item.children);
+            }
+        }
+        return count;
+    }
+
+    private shouldIgnoreFile(filename: string, ignorePatterns: string[]): boolean {
+        return ignorePatterns.some(pattern => {
+            if (pattern.includes('*')) {
+                const regex = new RegExp(pattern.replace(/\*/g, '.*'));
+                return regex.test(filename);
+            }
+            return filename.includes(pattern);
+        });
+    }
+
+    private isBinaryFile(filePath: string): boolean {
+        const binaryExtensions = [
+            '.exe', '.dll', '.so', '.dylib', '.bin', '.dat',
+            '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.ico', '.svg',
+            '.mp3', '.mp4', '.avi', '.mov', '.wmv', '.flv',
+            '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+            '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2',
+            '.ttf', '.otf', '.woff', '.woff2', '.eot'
+        ];
+        
+        const ext = path.extname(filePath).toLowerCase();
+        return binaryExtensions.includes(ext);
     }
 }

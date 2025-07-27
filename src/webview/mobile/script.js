@@ -217,16 +217,16 @@ class MobileInterface {
 
     handleMessage(data) {
         switch (data.type) {
-            case 'initial_state':
+            case 'initialState':
                 this.handleInitialState(data.data);
                 break;
-            case 'queue_update':
+            case 'queueUpdate':
                 this.updateQueue(data.queue);
                 break;
-            case 'status_update':
+            case 'statusUpdate':
                 this.updateStatus(data.status);
                 break;
-            case 'output_update':
+            case 'outputUpdate':
                 this.appendOutput(data.output, data.timestamp);
                 break;
             default:

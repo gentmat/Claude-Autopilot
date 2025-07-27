@@ -14,10 +14,10 @@ import {
 } from './queue';
 import { recoverWaitingMessages, stopSleepPrevention, stopHealthCheck, startScheduledSession, stopScheduledSession } from './services';
 import { sendSecuritySettings, toggleXssbypassSetting } from './services/security';
-import { getMobileServer } from './services/mobile';
 import { debugLog } from './utils';
 import { showError, showInfo, showWarning, showInput, Messages, showErrorFromException } from './utils/notifications';
 import { runDependencyCheck, showDependencyStatus } from './services/dependency-check/main';
+import {getMobileServer} from "./services/mobile/server";
 
 let configWatcher: vscode.Disposable | undefined;
 
@@ -746,7 +746,7 @@ export function activate(context: vscode.ExtensionContext) {
                                 ✅ Web server is running<br>
                                 🌍 ${serverStatus.isExternal ? 'External server (ngrok)' : 'Local network'}<br>
                                 ${serverStatus.hasPassword ? '🔒 Password protected (external tunnel)' : '🔓 No password (local network only)'}<br>
-                                ${serverStatus.blockedIPs > 0 ? `🚫 ${serverStatus.blockedIPs} blocked IPs` : ''}
+                                ${serverStatus.blockedIPs && serverStatus.blockedIPs > 0 ? `🚫 ${serverStatus.blockedIPs} blocked IPs` : ''}
                             </div>
                             
                             <div class="button-group">

@@ -119,7 +119,7 @@ async function performValidation(): Promise<boolean> {
         } else {
             // Show success message when ngrok is available
             vscode.window.showInformationMessage(
-                `✅ External server enabled successfully. ngrok ${ngrokResult.version} is ready.`
+                `✅ External server enabled successfully. ${ngrokResult.version} is ready.`
             );
             return true;
         }
