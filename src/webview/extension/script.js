@@ -914,8 +914,27 @@ window.addEventListener('message', event => {
         case 'queueSorted':
             const sortField = document.getElementById('sortField');
             const sortDirection = document.getElementById('sortDirection');
-            sortField.value = message.sortConfig.field;
-            sortDirection.value = message.sortConfig.direction;
+            if (sortField && sortDirection && message.sortConfig) {
+                // Only update if we have valid field and direction values
+                if (message.sortConfig.field && message.sortConfig.direction) {
+                    console.log('Updating sort selection with:', message.sortConfig);
+                    sortField.value = message.sortConfig.field;
+                    sortDirection.value = message.sortConfig.direction;
+                } else {
+                    console.log('Backend sent empty sortConfig, preserving current selection:', {
+                        currentField: sortField.value,
+                        currentDirection: sortDirection.value,
+                        receivedConfig: message.sortConfig
+                    });
+                    // Don't change the values - keep current selection
+                }
+            } else {
+                console.warn('Sort elements not found or sortConfig missing:', {
+                    sortField: !!sortField,
+                    sortDirection: !!sortDirection,
+                    sortConfig: !!message.sortConfig
+                });
+            }
             break;
         case 'workspaceFilesResult':
             renderFileAutocomplete(message.files, message.pagination);
@@ -1992,4 +2011,3 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }, 5000); // Check every 5 seconds
 });
-

@@ -173,17 +173,9 @@ export function activate(context: vscode.ExtensionContext) {
                             break;
                         case 'loadHistory':
                             loadWorkspaceHistory();
-                            panel.webview.postMessage({
-                                command: 'historyLoaded',
-                                data: null
-                            });
                             break;
                         case 'filterHistory':
                             filterHistory(message.searchQuery || '');
-                            panel.webview.postMessage({
-                                command: 'historyFiltered',
-                                data: null
-                            });
                             break;
                         case 'clearHistory':
                             context.globalState.update('claudeAutopilot.workspaceHistory', undefined);

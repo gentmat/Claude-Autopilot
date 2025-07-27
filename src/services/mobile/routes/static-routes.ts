@@ -31,7 +31,7 @@ export class StaticRoutes {
                 }
             }
             
-            const htmlPath = path.join(__dirname, '../../../webview/mobile/index.html');
+            const htmlPath = path.join(__dirname, '../../../webview/web/index.html');
             let html = fs.readFileSync(htmlPath, 'utf8');
             
             html = html.replace('href="styles.css"', `href="styles.css?token=${this.config.authToken}"`);
@@ -54,7 +54,7 @@ export class StaticRoutes {
                 return res.status(401).json({ error: 'Unauthorized: Invalid or missing authentication token' });
             }
             
-            const htmlPath = path.join(__dirname, '../../../webview/mobile/password.html');
+            const htmlPath = path.join(__dirname, '../../../webview/web/password.html');
             const html = fs.readFileSync(htmlPath, 'utf8');
             res.send(html);
         });
@@ -69,7 +69,7 @@ export class StaticRoutes {
                 return;
             }
             
-            res.sendFile(path.join(__dirname, '../../../webview/mobile/manifest.json'));
+            res.sendFile(path.join(__dirname, '../../../webview/web/manifest.json'));
         });
 
 
@@ -83,7 +83,7 @@ export class StaticRoutes {
                 return;
             }
             
-            const filePath = path.join(__dirname, '../../../webview/mobile/styles.css');
+            const filePath = path.join(__dirname, '../../../webview/web/styles.css');
             
             if (!fs.existsSync(filePath)) {
                 console.error('styles.css not found at expected path:', filePath);
@@ -129,11 +129,11 @@ export class StaticRoutes {
             
             // Extract the file path from the URL
             const requestedPath = req.path; // e.g., "/js/app.js" or "/js/core/MobileInterface.js"
-            const filePath = path.join(__dirname, '../../../webview/mobile', requestedPath);
+            const filePath = path.join(__dirname, '../../../webview/web', requestedPath);
             
-            // Security check: ensure the path stays within the webview/mobile directory
+            // Security check: ensure the path stays within the webview/web directory
             const normalizedPath = path.normalize(filePath);
-            const basePath = path.join(__dirname, '../../../webview/mobile');
+            const basePath = path.join(__dirname, '../../../webview/web');
             if (!normalizedPath.startsWith(basePath)) {
                 return res.status(403).send('Forbidden: Path traversal detected');
             }
