@@ -24,8 +24,17 @@ export class ServerManager {
     }
 
     public updateConfig(config: AuthConfig): void {
+        const wasExternalMode = this.config.useExternalServer && this.config.webPassword;
+        const isNowLocalMode = !config.useExternalServer || !config.webPassword;
+        
         this.config = config;
         this.authManager.updateConfig(config);
+        
+        // Clear sessions when switching from external to local mode
+        if (wasExternalMode && isNowLocalMode) {
+            this.authManager.clearSessions();
+            debugLog('🔄 Cleared sessions due to mode switch from external to local');
+        }
     }
 
     private setupMiddleware(): void {
@@ -35,10 +44,15 @@ export class ServerManager {
         // Basic auth middleware for API routes only
         this.app.use('/api', this.authManager.getApiAuthMiddleware());
 
-        // Apply password middleware to API routes for external server
-        if (this.config.useExternalServer && this.config.webPassword) {
-            this.app.use('/api', this.authManager.getPasswordAuthMiddleware());
-        }
+        // Apply dynamic password middleware to API routes
+        this.app.use('/api', (req, res, next) => {
+            // Check current config state dynamically
+            if (this.config.useExternalServer && this.config.webPassword) {
+                return this.authManager.getPasswordAuthMiddleware()(req, res, next);
+            }
+            // Skip password auth for local mode
+            next();
+        });
     }
 
     public getApp(): express.Application {
