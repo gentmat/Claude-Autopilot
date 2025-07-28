@@ -1,91 +1,89 @@
 /**
  * Individual dependency checker functions
  */
-import { spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
-import { DependencyCheckResult } from './types';
+import { DependencyCheckResult, DependencyError } from './types';
 
 export async function checkClaudeInstallation(): Promise<DependencyCheckResult> {
-    return new Promise((resolve) => {
-        const process = spawn('claude', ['--version'], {
-            stdio: ['pipe', 'pipe', 'pipe'],
-            shell: true
+    try {
+        const { error, status, stdout, stderr } = spawnSync('claude', ['--version'], {
+            stdio: 'pipe',
+            encoding: 'utf8',
+            timeout: 5000
         });
 
-        let stdout = '';
-        let stderr = '';
-
-        process.stdout?.on('data', (data) => {
-            stdout += data.toString();
-        });
-
-        process.stderr?.on('data', (data) => {
-            stderr += data.toString();
-        });
-
-        const timeout = setTimeout(() => {
-            process.kill();
-            resolve({
-                available: false,
-                error: 'Command timeout - Claude CLI may not be installed',
-                installInstructions: getClaudeInstallInstructions()
-            });
-        }, 5000);
-
-        process.on('close', (code) => {
-            clearTimeout(timeout);
-            
-            if (code === 0 && stdout.trim()) {
-                resolve({
-                    available: true,
-                    version: stdout.trim(),
-                    path: 'claude' // Could be enhanced to find actual path
-                });
-            } else {
-                resolve({
-                    available: false,
-                    error: stderr || 'Claude CLI not found or returned empty version',
-                    installInstructions: getClaudeInstallInstructions()
-                });
-            }
-        });
-
-        process.on('error', (error) => {
-            clearTimeout(timeout);
-            resolve({
+        if (error) {
+            return {
                 available: false,
                 error: `Failed to run claude command: ${error.message}`,
                 installInstructions: getClaudeInstallInstructions()
-            });
-        });
-    });
+            };
+        }
+
+        if (status === 0 && stdout?.trim()) {
+            return {
+                available: true,
+                version: stdout.trim(),
+                path: 'claude'
+            };
+        } else {
+            return {
+                available: false,
+                error: stderr?.trim() || 'Claude CLI not found or returned empty version',
+                installInstructions: getClaudeInstallInstructions()
+            };
+        }
+    } catch (error) {
+        return {
+            available: false,
+            error: `Failed to run claude command: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            installInstructions: getClaudeInstallInstructions()
+        };
+    }
 }
 
 export async function checkPythonInstallation(): Promise<DependencyCheckResult> {
     // Try different Python commands in order of preference
-    const pythonCommands = ['python3', 'python'];
+    // On Windows, try 'py' first as it's the Python launcher, then 'python'
+    // On other platforms, try 'python3' first, then 'python'
+    const pythonCommands = process.platform === 'win32' 
+        ? ['python', 'py'] 
+        : ['python3', 'python'];
+    
+    const triedCommands: string[] = [];
     
     for (const pythonCommand of pythonCommands) {
+        triedCommands.push(pythonCommand);
         try {
-            const result = await checkCommand(pythonCommand, ['--version']);
-            if (result.available) {
-                // Verify minimum Python version (3.7+)
-                const versionCheck = await verifyPythonVersion(pythonCommand);
-                if (versionCheck.valid) {
-                    return {
-                        available: true,
-                        version: versionCheck.version,
-                        path: pythonCommand
-                    };
-                } else {
-                    return {
-                        available: false,
-                        error: `Python version ${versionCheck.version} is too old. Minimum required: 3.7`,
-                        installInstructions: getPythonInstallInstructions()
-                    };
-                }
+            const { error, status } = spawnSync(pythonCommand, ['--version'], { stdio: 'pipe' });
+            
+            if (error) {
+                // Command not found or failed to execute
+                continue;
+            }
+            
+            if (status !== 0) {
+                // Command executed but returned non-zero status
+                continue;
+            }
+            
+            // Command succeeded, now verify minimum Python version (3.9+)
+            const versionCheck = await verifyPythonVersion(pythonCommand);
+            if (versionCheck.valid) {
+                return {
+                    available: true,
+                    version: versionCheck.version,
+                    path: pythonCommand
+                };
+            } else {
+                return {
+                    available: false,
+                    error: `Python version ${versionCheck.version} is too old. Minimum required: 3.9`,
+                    installInstructions: getPythonInstallInstructions()
+                };
             }
         } catch (error) {
             // Continue to next python command
@@ -93,11 +91,9 @@ export async function checkPythonInstallation(): Promise<DependencyCheckResult> 
         }
     }
     
-    return {
-        available: false,
-        error: 'Python not found. Tried: python3, python',
-        installInstructions: getPythonInstallInstructions()
-    };
+    // If we get here, none of the Python commands worked
+    const errorMessage = `Could not locate Python interpreter (tried ${triedCommands.join(', ')}). Please install Python 3.9+ and restart VS Code.`;
+    throw new DependencyError(errorMessage);
 }
 
 export async function checkPtyWrapperAvailability(): Promise<DependencyCheckResult> {
@@ -146,112 +142,71 @@ export async function checkNgrokInstallation(): Promise<DependencyCheckResult> {
 }
 
 async function verifyPythonVersion(pythonCommand: string): Promise<{valid: boolean; version: string}> {
-    return new Promise((resolve) => {
-        const process = spawn(pythonCommand, ['--version'], {
-            stdio: ['pipe', 'pipe', 'pipe'],
-            shell: true
+    try {
+        const { error, status, stdout, stderr } = spawnSync(pythonCommand, ['--version'], { 
+            stdio: 'pipe',
+            encoding: 'utf8'
         });
 
-        let stdout = '';
-        let stderr = '';
+        if (error || status !== 0) {
+            return { valid: false, version: 'unknown' };
+        }
 
-        process.stdout?.on('data', (data) => {
-            stdout += data.toString();
-        });
-
-        process.stderr?.on('data', (data) => {
-            stderr += data.toString();
-        });
-
-        const timeout = setTimeout(() => {
-            process.kill();
-            resolve({ valid: false, version: 'unknown' });
-        }, 5000);
-
-        process.on('close', (code) => {
-            clearTimeout(timeout);
+        // Parse version from output like "Python 3.9.7"
+        const versionOutput = stdout || stderr || '';
+        const versionMatch = versionOutput.match(/Python (\d+\.\d+\.\d+)/);
+        
+        if (versionMatch) {
+            const version = versionMatch[1];
+            const [major, minor] = version.split('.').map(Number);
             
-            if (code === 0) {
-                // Parse version from output like "Python 3.9.7"
-                const versionOutput = stdout || stderr;
-                const versionMatch = versionOutput.match(/Python (\d+\.\d+\.\d+)/);
-                
-                if (versionMatch) {
-                    const version = versionMatch[1];
-                    const [major, minor] = version.split('.').map(Number);
-                    
-                    // Check if version is 3.7 or higher
-                    const isValid = major > 3 || (major === 3 && minor >= 7);
-                    resolve({ valid: isValid, version });
-                } else {
-                    resolve({ valid: false, version: versionOutput.trim() });
-                }
-            } else {
-                resolve({ valid: false, version: 'unknown' });
-            }
-        });
-
-        process.on('error', () => {
-            clearTimeout(timeout);
-            resolve({ valid: false, version: 'unknown' });
-        });
-    });
+            // Check if version is 3.9 or higher
+            const isValid = major > 3 || (major === 3 && minor >= 9);
+            return { valid: isValid, version };
+        } else {
+            return { valid: false, version: versionOutput.trim() };
+        }
+    } catch (error) {
+        return { valid: false, version: 'unknown' };
+    }
 }
 
 async function checkCommand(command: string, args: string[]): Promise<DependencyCheckResult> {
-    return new Promise((resolve) => {
-        const process = spawn(command, args, {
-            stdio: ['pipe', 'pipe', 'pipe'],
-            shell: true
+    try {
+        const { error, status, stdout, stderr } = spawnSync(command, args, {
+            stdio: 'pipe',
+            encoding: 'utf8',
+            timeout: 10000
         });
 
-        let stdout = '';
-        let stderr = '';
-
-        process.stdout?.on('data', (data) => {
-            stdout += data.toString();
-        });
-
-        process.stderr?.on('data', (data) => {
-            stderr += data.toString();
-        });
-
-        const timeout = setTimeout(() => {
-            process.kill();
-            resolve({
-                available: false,
-                error: `Command timeout: ${command}`
-            });
-        }, 10000);
-
-        process.on('close', (code) => {
-            clearTimeout(timeout);
-            
-            if (code === 0) {
-                const output = stdout || stderr;
-                const version = output.trim();
-                
-                resolve({
-                    available: true,
-                    version,
-                    path: command
-                });
-            } else {
-                resolve({
-                    available: false,
-                    error: stderr || `Command failed: ${command}`
-                });
-            }
-        });
-
-        process.on('error', (error) => {
-            clearTimeout(timeout);
-            resolve({
+        if (error) {
+            return {
                 available: false,
                 error: `Failed to run ${command}: ${error.message}`
-            });
-        });
-    });
+            };
+        }
+
+        if (status === 0) {
+            const output = stdout || stderr;
+            const version = output.trim();
+            
+            return {
+                available: true,
+                version,
+                path: command
+            };
+        } else {
+            return {
+                available: false,
+                error: stderr?.trim() || `Command failed: ${command}`
+            };
+        }
+    } catch (error) {
+        return {
+            available: false,
+            error: `Failed to run ${command}: ${error instanceof Error ? error.message : 'Unknown error'}`
+        };
+    }
 }
 
 function getClaudeInstallInstructions(): string {
@@ -306,7 +261,7 @@ function getPythonInstallInstructions(): string {
 1. Download from: https://python.org/downloads
 2. During installation, check "Add Python to PATH"
 3. Restart VS Code
-4. Verify installation: python --version`;
+4. Verify installation: python --version or py --version`;
             
         case 'linux': // Linux
             return `Python Installation (Linux):
@@ -318,7 +273,7 @@ function getPythonInstallInstructions(): string {
         default:
             return `Python Installation:
 1. Visit: https://python.org/downloads
-2. Download Python 3.7 or higher
+2. Download Python 3.9 or higher
 3. Follow platform-specific installation instructions
 4. Restart VS Code
 5. Verify installation: python3 --version`;
