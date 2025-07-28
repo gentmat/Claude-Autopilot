@@ -3,6 +3,149 @@ import { validateMessage } from '../security/validation.js';
 import { sendEditMessage } from '../communication/vscode-api.js';
 import { showError } from '../utils/dom-helpers.js';
 
+export function showConfirmDialog(title, message, confirmText = 'Confirm', cancelText = 'Cancel') {
+  return new Promise((resolve) => {
+    // Remove any existing confirm dialog
+    const existingDialog = document.getElementById('confirmDialog');
+    if (existingDialog) {
+      existingDialog.remove();
+    }
+
+    // Create dialog overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'confirmDialog';
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+    `;
+
+    // Create dialog box
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      background: var(--vscode-editor-background);
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 8px;
+      padding: 20px;
+      min-width: 350px;
+      max-width: 500px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    `;
+
+    // Create dialog content
+    const titleElement = document.createElement('h3');
+    titleElement.textContent = title;
+    titleElement.style.cssText = `
+      margin: 0 0 15px 0;
+      color: var(--vscode-foreground);
+      font-size: 16px;
+      font-weight: 600;
+    `;
+
+    const messageElement = document.createElement('p');
+    messageElement.textContent = message;
+    messageElement.style.cssText = `
+      margin: 0 0 20px 0;
+      color: var(--vscode-foreground);
+      font-size: 14px;
+      line-height: 1.4;
+    `;
+
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = `
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    `;
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = cancelText;
+    cancelBtn.style.cssText = `
+      padding: 8px 16px;
+      background: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s ease;
+    `;
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.textContent = confirmText;
+    confirmBtn.style.cssText = `
+      padding: 8px 16px;
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s ease;
+    `;
+
+    // Event handlers
+    cancelBtn.onclick = () => {
+      overlay.remove();
+      resolve(false);
+    };
+
+    confirmBtn.onclick = () => {
+      overlay.remove();
+      resolve(true);
+    };
+
+    // Handle keyboard shortcuts
+    const handleKeydown = (e) => {
+      if (e.key === 'Enter') {
+        confirmBtn.click();
+      }
+      if (e.key === 'Escape') {
+        cancelBtn.click();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeydown);
+
+    // Remove event listener when dialog closes
+    const originalRemove = overlay.remove.bind(overlay);
+    overlay.remove = () => {
+      document.removeEventListener('keydown', handleKeydown);
+      originalRemove();
+    };
+
+    // Assemble dialog
+    buttonContainer.appendChild(cancelBtn);
+    buttonContainer.appendChild(confirmBtn);
+    
+    dialog.appendChild(titleElement);
+    dialog.appendChild(messageElement);
+    dialog.appendChild(buttonContainer);
+    
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    // Focus the confirm button
+    setTimeout(() => {
+      confirmBtn.focus();
+    }, 100);
+
+    // Close on overlay click
+    overlay.onclick = (e) => {
+      if (e.target === overlay) {
+        cancelBtn.click();
+      }
+    };
+  });
+}
+
 export function showEditDialog(message, messageId) {
   // Remove any existing edit dialog
   const existingDialog = document.getElementById('editDialog');

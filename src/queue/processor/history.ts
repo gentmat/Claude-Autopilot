@@ -79,11 +79,16 @@ export function loadWorkspaceHistory(): void {
     const storageKey = getHistoryStorageKey();
     const history = extensionContext.globalState.get<HistoryRun[]>(storageKey, []);
     
+    // Sort by startTime descending (newest first) instead of using reverse()
+    const sortedHistory = [...history].sort((a, b) => 
+        new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+    );
+    
     if (claudePanel) {
         try {
             claudePanel.webview.postMessage({
                 command: 'historyLoaded',
-                history: history.reverse()
+                history: sortedHistory
             });
         } catch (error) {
             debugLog(`❌ Failed to send history to webview: ${error}`);
@@ -116,11 +121,16 @@ export function filterHistory(filter: string): void {
             filteredHistory = allHistory;
     }
     
+    // Sort filtered history by startTime descending (newest first)
+    const sortedFilteredHistory = [...filteredHistory].sort((a, b) => 
+        new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+    );
+    
     if (claudePanel) {
         try {
             claudePanel.webview.postMessage({
                 command: 'historyFiltered',
-                history: filteredHistory.reverse(),
+                history: sortedFilteredHistory,
                 filter: filter
             });
         } catch (error) {
@@ -194,6 +204,22 @@ export function endCurrentHistoryRun(): void {
     if (currentRun) {
         currentRun.endTime = new Date().toISOString();
         saveWorkspaceHistory();
+        debugLog(`📋 History run ${currentRun.id} ended at ${currentRun.endTime}`);
+    }
+}
+
+export function checkAndEndHistoryRunIfComplete(): void {
+    if (!currentRun) return;
+    
+    // Don't auto-end if there are pending or processing messages
+    const hasPendingOrProcessing = messageQueue.some(msg => 
+        msg.status === 'pending' || msg.status === 'processing'
+    );
+    
+    if (!hasPendingOrProcessing && messageQueue.length > 0) {
+        // All messages are either completed, error, or waiting - end the run
+        debugLog(`📋 All messages processed, ending current history run`);
+        endCurrentHistoryRun();
     }
 }
 

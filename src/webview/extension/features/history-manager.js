@@ -8,6 +8,7 @@ import {
   sendDeleteAllHistory 
 } from '../communication/vscode-api.js';
 import { showError } from '../utils/dom-helpers.js';
+import { showConfirmDialog } from '../ui/message-dialogs.js';
 
 export function loadHistory() {
   try {
@@ -28,9 +29,16 @@ export function filterHistory() {
   }
 }
 
-export function deleteHistoryRun(runId) {
+export async function deleteHistoryRun(runId) {
   try {
-    if (confirm('Are you sure you want to delete this history run?')) {
+    const confirmed = await showConfirmDialog(
+      'Delete History Run',
+      'Are you sure you want to delete this history run? This action cannot be undone.',
+      'Delete',
+      'Cancel'
+    );
+    
+    if (confirmed) {
       sendDeleteHistoryRun(runId);
     }
   } catch (error) {
@@ -39,9 +47,16 @@ export function deleteHistoryRun(runId) {
   }
 }
 
-export function deleteAllHistory() {
+export async function deleteAllHistory() {
   try {
-    if (confirm('Are you sure you want to delete ALL history? This action cannot be undone.')) {
+    const confirmed = await showConfirmDialog(
+      'Delete All History',
+      'Are you sure you want to delete ALL history? This action cannot be undone and will remove all historical data.',
+      'Delete All',
+      'Cancel'
+    );
+    
+    if (confirmed) {
       sendDeleteAllHistory();
     }
   } catch (error) {

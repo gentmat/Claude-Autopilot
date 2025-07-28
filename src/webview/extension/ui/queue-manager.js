@@ -14,7 +14,7 @@ import {
   sendSortQueue,
   sendClearQueue
 } from '../communication/vscode-api.js';
-import { showEditDialog } from './message-dialogs.js';
+import { showEditDialog, showConfirmDialog } from './message-dialogs.js';
 import { showError } from '../utils/dom-helpers.js';
 
 export function updateQueue(queue) {
@@ -253,9 +253,18 @@ export function sortQueue() {
   }
 }
 
-export function clearQueue() {
+export async function clearQueue() {
   try {
-    sendClearQueue();
+    const confirmed = await showConfirmDialog(
+      'Clear Queue',
+      'Are you sure you want to clear all messages from the queue? This action cannot be undone.',
+      'Clear Queue',
+      'Cancel'
+    );
+    
+    if (confirmed) {
+      sendClearQueue();
+    }
   } catch (error) {
     console.error('Error clearing queue:', error);
     showError('Failed to clear queue');

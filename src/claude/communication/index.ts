@@ -4,7 +4,7 @@ import { messageQueue, claudeProcess, sessionReady, processingQueue, currentMess
 import { debugLog } from '../../utils/logging';
 import { getErrorMessage } from '../../utils/error-handler';
 import { updateWebviewContent, updateSessionState } from '../../ui/webview';
-import { saveWorkspaceHistory, ensureHistoryRun, updateMessageStatusInHistory } from '../../queue/processor/history';
+import { saveWorkspaceHistory, ensureHistoryRun, updateMessageStatusInHistory, checkAndEndHistoryRunIfComplete } from '../../queue/processor/history';
 import { TIMEOUT_MS, ANSI_CLEAR_SCREEN_PATTERNS } from '../../core/constants';
 import { startClaudeSession } from '../../claude/session';
 import { getMobileServer } from '../../services/mobile/index';
@@ -31,6 +31,8 @@ export async function processNextMessage(): Promise<void> {
     const message = messageQueue.find(m => m.status === 'pending');
     if (!message) {
         debugLog('No pending messages found - processing remains active for new messages');
+        // Check if we should end the current history run
+        checkAndEndHistoryRunIfComplete();
         updateWebviewContent();
         updateSessionState();
         vscode.window.showInformationMessage('No pending messages to process. Processing remains active.');
@@ -442,6 +444,9 @@ export function stopProcessingQueue(): void {
         debugLog('⌨️ Sending ESC to Claude to cancel current operation');
         claudeProcess.stdin.write('\x1b');
     }
+    
+    // Check if we should end the current history run when processing is manually stopped
+    checkAndEndHistoryRunIfComplete();
     
     updateWebviewContent();
     updateSessionState();
