@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ChildProcess } from 'child_process';
-import { MessageItem, HistoryRun, QueueSortConfig } from '../../core/types';
+import { MessageItem, HistoryRun } from '../../core/types';
 
 export let claudePanel: vscode.WebviewPanel | null = null;
 export let isRunning = false;
@@ -19,7 +19,6 @@ export let debugMode = process.env.DEBUG_MODE === 'true';
 
 export let currentRun: HistoryRun | null = null;
 export let extensionContext: vscode.ExtensionContext;
-export let queueSortConfig: QueueSortConfig = { field: 'timestamp', direction: 'asc' };
 
 export let claudeOutputBuffer: string = '';
 export let claudeCurrentScreen: string = '';
@@ -107,9 +106,6 @@ export function setLastClaudeOutputTime(time: number) {
     lastClaudeOutputTime = time;
 }
 
-export function setQueueSortConfig(config: QueueSortConfig) {
-    queueSortConfig = config;
-}
 export function setDebugMode(debug: boolean) {
     debugMode = debug;
 }

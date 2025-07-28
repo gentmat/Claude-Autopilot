@@ -138,7 +138,17 @@ export function renderHistory(history) {
         metaDiv.className = 'history-message-meta';
                 
         const statusSpan = createSafeElement('span', msg.status.toUpperCase(), `status-${msg.status}`);
-        const timeSpan = createSafeElement('span', new Date(msg.timestamp).toLocaleTimeString(), '');
+        
+        let timeText = new Date(msg.timestamp).toLocaleTimeString();
+        
+        // Show processing time for completed/error messages
+        if ((msg.status === 'completed' || msg.status === 'error') && msg.processingStartedAt && msg.completedAt) {
+          const processingTime = new Date(msg.completedAt) - new Date(msg.processingStartedAt);
+          const seconds = (processingTime / 1000).toFixed(1);
+          timeText += ` (${seconds}s)`;
+        }
+        
+        const timeSpan = createSafeElement('span', timeText, '');
                 
         metaDiv.appendChild(statusSpan);
         metaDiv.appendChild(timeSpan);

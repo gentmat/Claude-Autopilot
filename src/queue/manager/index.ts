@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { MessageItem } from '../../core/types';
-import { messageQueue, queueSortConfig, claudePanel, setQueueSortConfig, processingQueue, sessionReady, setProcessingQueue, setIsRunning } from '../../core/state';
+import { messageQueue, claudePanel, processingQueue, sessionReady, setProcessingQueue, setIsRunning } from '../../core/state';
 import { debugLog } from '../../utils/logging';
 import { updateWebviewContent } from '../../ui/webview';
 import { processNextMessage } from '../../claude/communication';
@@ -77,43 +77,9 @@ export function reorderQueue(fromIndex: number, toIndex: number): void {
     messageQueue.splice(toIndex, 0, movedItem);
     
     updateWebviewContent();
+    savePendingQueue();
 }
 
-export function sortQueue(field: 'timestamp' | 'status' | 'text', direction: 'asc' | 'desc'): void {
-    setQueueSortConfig({ field, direction });
-    
-    messageQueue.sort((a, b) => {
-        let comparison = 0;
-        
-        switch (field) {
-            case 'timestamp':
-                comparison = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-                break;
-            case 'status':
-                const statusOrder = { 'pending': 0, 'processing': 1, 'waiting': 2, 'completed': 3, 'error': 4 };
-                comparison = statusOrder[a.status] - statusOrder[b.status];
-                break;
-            case 'text':
-                comparison = a.text.localeCompare(b.text);
-                break;
-        }
-        
-        return direction === 'desc' ? -comparison : comparison;
-    });
-    
-    updateWebviewContent();
-    
-    if (claudePanel) {
-        try {
-            claudePanel.webview.postMessage({
-                command: 'queueSorted',
-                sortConfig: queueSortConfig
-            });
-        } catch (error) {
-            debugLog(`❌ Failed to send queue sort config to webview: ${error}`);
-        }
-    }
-}
 
 export function clearMessageQueue(): void {
     messageQueue.length = 0;

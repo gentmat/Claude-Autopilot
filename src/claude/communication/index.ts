@@ -31,7 +31,7 @@ export async function processNextMessage(): Promise<void> {
     const message = messageQueue.find(m => m.status === 'pending');
     if (!message) {
         debugLog('No pending messages found - processing remains active for new messages');
-        // Check if we should end the current history run
+        // Check if we should end the current history run since queue is complete
         checkAndEndHistoryRunIfComplete();
         updateWebviewContent();
         updateSessionState();
@@ -74,6 +74,7 @@ export async function processNextMessage(): Promise<void> {
 
     debugLog(`📋 Processing message #${message.id}: ${message.text.substring(0, 50)}...`);
     message.status = 'processing';
+    message.processingStartedAt = new Date().toISOString();
     updateMessageStatusInHistory(message.id, 'processing');
     setCurrentMessage(message);
     updateWebviewContent();

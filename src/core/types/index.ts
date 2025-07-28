@@ -5,6 +5,7 @@ export interface MessageItem {
     status: 'pending' | 'processing' | 'completed' | 'error' | 'waiting';
     output?: string;
     error?: string;
+    processingStartedAt?: string;
     completedAt?: string;
     waitUntil?: number;
     waitSeconds?: number;
@@ -23,7 +24,3 @@ export interface HistoryRun {
     waitingMessages: number;
 }
 
-export interface QueueSortConfig {
-    field: 'timestamp' | 'status' | 'text';
-    direction: 'asc' | 'desc';
-}

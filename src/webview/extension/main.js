@@ -166,7 +166,7 @@ document.addEventListener('DOMContentLoaded', initialize);
 
 // Import all modules needed for global access
 import { startProcessing, stopProcessing, interruptClaude, resetSession, openSettings } from './ui/session-controls.js';
-import { clearQueue, sortQueue } from './ui/queue-manager.js';
+import { clearQueue, handleDragStart, handleDragOver, handleDrop } from './ui/queue-manager.js';
 import { clearClaudeOutput } from './ui/output-handlers.js';
 import { filterHistory, deleteAllHistory } from './features/history-manager.js';
 import { simulateUsageLimit, clearAllTimers, debugQueueState, toggleDebugMode } from './features/development-tools.js';
@@ -180,7 +180,6 @@ window.interruptClaude = interruptClaude;
 window.resetSession = resetSession;
 window.openSettings = openSettings;
 window.clearQueue = clearQueue;
-window.sortQueue = sortQueue;
 window.clearClaudeOutput = clearClaudeOutput;
 window.loadHistory = loadHistory;
 window.filterHistory = filterHistory;
@@ -193,3 +192,6 @@ window.startWebInterface = startWebInterface;
 window.stopWebInterface = stopWebInterface;
 window.showWebInterfaceQR = showWebInterfaceQR;
 window.openWebInterface = openWebInterface;
+window.handleDragStart = handleDragStart;
+window.handleDragOver = handleDragOver;
+window.handleDrop = handleDrop;

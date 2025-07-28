@@ -7,9 +7,10 @@ import {
 import { updateWebviewContent, updateSessionState, getWebviewContent, sendHistoryVisibilitySettings } from './ui';
 import { startClaudeSession, resetClaudeSession, handleClaudeKeypress, startProcessingQueue, stopProcessingQueue, flushClaudeOutput, clearClaudeOutput } from './claude';
 import {
-    removeMessageFromQueue, duplicateMessageInQueue, editMessageInQueue, reorderQueue, sortQueue, clearMessageQueue,
+    removeMessageFromQueue, duplicateMessageInQueue, editMessageInQueue, reorderQueue, clearMessageQueue,
     addMessageToQueueFromWebview, loadWorkspaceHistory, filterHistory, 
     loadPendingQueue, clearPendingQueue, saveWorkspaceHistory, endCurrentHistoryRun,
+    deleteHistoryRun, deleteAllHistory,
     startAutomaticMaintenance, stopAutomaticMaintenance, performQueueMaintenance, getMemoryUsageSummary
 } from './queue';
 import { recoverWaitingMessages, stopSleepPrevention, stopHealthCheck, startScheduledSession, stopScheduledSession } from './services';
@@ -106,6 +107,13 @@ export function activate(context: vscode.ExtensionContext) {
             // Set webview content
             panel.webview.html = getWebviewContent(context, panel.webview);
 
+            // Initialize webview with current state after a brief delay
+            // to ensure the webview DOM is ready to receive messages
+            setTimeout(() => {
+                updateWebviewContent();
+                updateSessionState();
+            }, 100);
+
             // Handle panel disposal
             panel.onDidDispose(() => {
                 debugLog('📱 Webview panel disposed');
@@ -124,7 +132,7 @@ export function activate(context: vscode.ExtensionContext) {
                         case 'startProcessing':
                             try {
                                 if (!isRunning) {
-                                    await startProcessingQueue();
+                                    await startProcessingQueue(message.skipPermissions);
                                 }
                             } catch (error) {
                                 showErrorFromException(error, Messages.FAILED_TO_START_PROCESSING);
@@ -157,10 +165,7 @@ export function activate(context: vscode.ExtensionContext) {
                             editMessageInQueue(message.messageId, message.newText);
                             break;
                         case 'reorderQueue':
-                            reorderQueue(message.messageId, message.direction);
-                            break;
-                        case 'sortQueue':
-                            sortQueue(message.sortBy, message.sortOrder);
+                            reorderQueue(message.fromIndex, message.toIndex);
                             break;
                         case 'clearQueue':
                             clearMessageQueue();
@@ -175,13 +180,19 @@ export function activate(context: vscode.ExtensionContext) {
                             loadWorkspaceHistory();
                             break;
                         case 'filterHistory':
-                            filterHistory(message.searchQuery || '');
+                            filterHistory(message.filter || '');
                             break;
                         case 'clearHistory':
                             context.globalState.update('claudeAutopilot.workspaceHistory', undefined);
                             panel.webview.postMessage({
                                 command: 'historyCleared'
                             });
+                            break;
+                        case 'deleteHistoryRun':
+                            deleteHistoryRun(message.runId);
+                            break;
+                        case 'deleteAllHistory':
+                            deleteAllHistory();
                             break;
                         case 'clearPendingQueue':
                             clearPendingQueue();
@@ -283,7 +294,7 @@ export function activate(context: vscode.ExtensionContext) {
                     if (config.developmentMode) {
                         developmentOnly(() => {
                             debugLog('🔍 Development mode: Auto-starting processing queue');
-                            startProcessingQueue().catch(error => {
+                            startProcessingQueue(config.session.skipPermissions).catch(error => {
                                 debugLog(`Error auto-starting processing queue: ${error}`);
                             });
                         });

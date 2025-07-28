@@ -11,7 +11,6 @@ import {
   sendRemoveMessage, 
   sendDuplicateMessage, 
   sendReorderQueue,
-  sendSortQueue,
   sendClearQueue
 } from '../communication/vscode-api.js';
 import { showEditDialog, showConfirmDialog } from './message-dialogs.js';
@@ -48,6 +47,17 @@ export function renderQueue() {
       let statusText = item.status;
       let timeText = new Date(item.timestamp).toLocaleString();
       let additionalContent = '';
+
+      // Show processing time for completed/error messages
+      if ((item.status === 'completed' || item.status === 'error') && item.processingStartedAt && item.completedAt) {
+        const processingTime = new Date(item.completedAt) - new Date(item.processingStartedAt);
+        const seconds = (processingTime / 1000).toFixed(1);
+        timeText += ` (${seconds}s)`;
+      } else if (item.status === 'processing' && item.processingStartedAt) {
+        const processingTime = new Date() - new Date(item.processingStartedAt);
+        const seconds = (processingTime / 1000).toFixed(1);
+        timeText += ` (${seconds}s)`;
+      }
 
       if (item.status === 'waiting' && item.waitSeconds > 0) {
         const hours = Math.floor(item.waitSeconds / 3600);
@@ -116,9 +126,10 @@ export function renderQueue() {
       queueItem.draggable = isDraggable;
       if (isDraggable) {
         queueItem.addEventListener('dragstart', (e) => handleDragStart(e, index));
-        queueItem.addEventListener('dragover', handleDragOver);
-        queueItem.addEventListener('drop', (e) => handleDrop(e, index));
       }
+      // Add dragover and drop listeners to ALL items so you can drop on any item
+      queueItem.addEventListener('dragover', handleDragOver);
+      queueItem.addEventListener('drop', (e) => handleDrop(e, index));
             
       // Create header
       const header = document.createElement('div');
@@ -241,17 +252,6 @@ export function editMessage(messageId) {
   }
 }
 
-export function sortQueue() {
-  try {
-    const field = document.getElementById('sortField').value;
-    const direction = document.getElementById('sortDirection').value;
-        
-    sendSortQueue(field, direction);
-  } catch (error) {
-    console.error('Error sorting queue:', error);
-    showError('Failed to sort queue');
-  }
-}
 
 export async function clearQueue() {
   try {

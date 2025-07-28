@@ -58,9 +58,6 @@ export function sendReorderQueue(fromIndex, toIndex) {
   sendMessageToVSCode('reorderQueue', { fromIndex, toIndex });
 }
 
-export function sendSortQueue(field, direction) {
-  sendMessageToVSCode('sortQueue', { field, direction });
-}
 
 export function sendLoadHistory() {
   sendMessageToVSCode('loadHistory');

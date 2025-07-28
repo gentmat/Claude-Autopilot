@@ -3,7 +3,6 @@ import { HistoryRun, MessageItem } from '../../core/types';
 import { extensionContext, currentRun, messageQueue, setCurrentRun } from '../../core/state';
 import { claudePanel } from '../../core/state';
 import { debugLog, getHistoryStorageKey, getPendingQueueStorageKey, getWorkspacePath } from '../../utils/logging';
-import { getErrorMessage } from '../../utils/error-handler';
 import { showErrorFromException } from '../../utils/notifications';
 import { DebugEmojis, formatDebugMessage } from '../../core/constants/ui-strings';
 import { getValidatedConfig } from '../../core/config';
@@ -115,7 +114,11 @@ export function filterHistory(filter: string): void {
             filteredHistory = allHistory.filter(run => run.errorMessages > 0);
             break;
         case 'recent':
-            filteredHistory = allHistory.slice(-10);
+            // Sort first, then take the 10 most recent
+            const sortedForRecent = [...allHistory].sort((a, b) => 
+                new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+            );
+            filteredHistory = sortedForRecent.slice(0, 10);
             break;
         default:
             filteredHistory = allHistory;
@@ -140,6 +143,11 @@ export function filterHistory(filter: string): void {
 }
 
 export function startNewHistoryRun(): void {
+    if (!extensionContext) return;
+    
+    // Before creating a new run, mark any ongoing runs as incomplete
+    markIncompleteRuns();
+    
     const run: HistoryRun = {
         id: `run_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
         startTime: new Date().toISOString(),
@@ -155,7 +163,7 @@ export function startNewHistoryRun(): void {
 }
 
 export function ensureHistoryRun(): void {
-    if (!currentRun) {
+    if (!currentRun || currentRun.endTime) {
         startNewHistoryRun();
     }
 }
@@ -178,6 +186,9 @@ export function updateMessageStatusInHistory(messageId: string, status: 'pending
         }
         if (error !== undefined) {
             currentRun.messages[messageIndex].error = error;
+        }
+        if (status === 'processing') {
+            currentRun.messages[messageIndex].processingStartedAt = new Date().toISOString();
         }
         if (status === 'completed') {
             currentRun.messages[messageIndex].completedAt = new Date().toISOString();
@@ -257,11 +268,6 @@ export function loadPendingQueue(): void {
     if (pendingMessages.length > 0) {
         messageQueue.splice(0, messageQueue.length, ...pendingMessages);
         vscode.window.showInformationMessage(`Restored ${pendingMessages.length} pending messages from previous session`);
-        
-        if (!currentRun) {
-            startNewHistoryRun();
-            saveWorkspaceHistory();
-        }
     }
 }
 
@@ -270,4 +276,89 @@ export function clearPendingQueue(): void {
     
     const storageKey = getPendingQueueStorageKey();
     extensionContext.globalState.update(storageKey, []);
+}
+
+export function deleteHistoryRun(runId: string): void {
+    if (!extensionContext) return;
+    
+    try {
+        const storageKey = getHistoryStorageKey();
+        const history = extensionContext.globalState.get<HistoryRun[]>(storageKey, []);
+        
+        const filteredHistory = history.filter(run => run.id !== runId);
+        
+        extensionContext.globalState.update(storageKey, filteredHistory);
+        debugLog(`🗑️ Deleted history run ${runId}`);
+        
+        // Reload history to refresh the UI
+        loadWorkspaceHistory();
+        
+    } catch (error) {
+        debugLog(formatDebugMessage(DebugEmojis.ERROR, `Failed to delete history run: ${error}`));
+        showErrorFromException(error, 'Failed to delete history run');
+    }
+}
+
+export function deleteAllHistory(): void {
+    if (!extensionContext) return;
+    
+    try {
+        const storageKey = getHistoryStorageKey();
+        extensionContext.globalState.update(storageKey, []);
+        debugLog(`🗑️ Deleted all history`);
+        
+        // Reload history to refresh the UI
+        loadWorkspaceHistory();
+        
+    } catch (error) {
+        debugLog(formatDebugMessage(DebugEmojis.ERROR, `Failed to delete all history: ${error}`));
+        showErrorFromException(error, 'Failed to delete all history');
+    }
+}
+
+function markIncompleteRuns(): void {
+    if (!extensionContext) return;
+    
+    try {
+        const storageKey = getHistoryStorageKey();
+        const history = extensionContext.globalState.get<HistoryRun[]>(storageKey, []);
+        
+        let hasChanges = false;
+        
+        // Find runs without endTime (ongoing runs) and mark them as incomplete
+        history.forEach(run => {
+            if (!run.endTime) {
+                // Calculate run processing time: use the last completed message time as end time
+                const messagesWithTimes = run.messages.filter(m => m.completedAt);
+                if (messagesWithTimes.length > 0) {
+                    const lastEnd = Math.max(...messagesWithTimes.map(m => new Date(m.completedAt!).getTime()));
+                    run.endTime = new Date(lastEnd).toISOString();
+                } else {
+                    run.endTime = new Date().toISOString();
+                }
+                debugLog(`🔄 Marked incomplete run ${run.id} as ended (interrupted)`);
+                hasChanges = true;
+            }
+        });
+        
+        // Add backward compatibility for processingStartedAt
+        history.forEach(run => {
+            run.messages.forEach(message => {
+                if (!message.processingStartedAt && message.completedAt) {
+                    // For backward compatibility, use completedAt as processingStartedAt
+                    message.processingStartedAt = message.completedAt;
+                    hasChanges = true;
+                }
+            });
+        });
+        
+        // Save changes if any runs were marked as incomplete or updated for compatibility
+        if (hasChanges) {
+            extensionContext.globalState.update(storageKey, history);
+            debugLog(`💾 Updated history with ${history.filter(r => r.endTime).length} completed runs`);
+        }
+        
+    } catch (error) {
+        debugLog(formatDebugMessage(DebugEmojis.ERROR, `Failed to mark incomplete runs: ${error}`));
+    }
 }
