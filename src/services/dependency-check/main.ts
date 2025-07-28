@@ -9,6 +9,42 @@ import {
     checkPtyWrapperAvailability,
     checkNgrokInstallation
 } from './checkers';
+import * as os from 'os';
+
+function getPythonInstallInstructions(): string {
+    const platform = os.platform();
+    
+    switch (platform) {
+        case 'darwin': // macOS
+            return `Python Installation (macOS):
+1. Install via Homebrew: brew install python3
+2. Or download from: https://python.org/downloads
+3. Restart VS Code
+4. Verify installation: python3 --version`;
+            
+        case 'win32': // Windows  
+            return `Python Installation (Windows):
+1. Download from: https://python.org/downloads
+2. During installation, check "Add Python to PATH"
+3. Restart VS Code
+4. Verify installation: python --version`;
+            
+        case 'linux': // Linux
+            return `Python Installation (Linux):
+1. Ubuntu/Debian: sudo apt update && sudo apt install python3
+2. CentOS/RHEL: sudo yum install python3
+3. Restart VS Code
+4. Verify installation: python3 --version`;
+            
+        default:
+            return `Python Installation:
+1. Visit: https://python.org/downloads
+2. Download Python 3.9 or higher
+3. Follow platform-specific installation instructions
+4. Restart VS Code
+5. Verify installation: python3 --version`;
+    }
+}
 
 // Re-export status functions
 export { showDependencyStatus, showInstallationInstructions } from './status';
@@ -22,11 +58,17 @@ export async function runDependencyCheck(): Promise<DependencyCheckResults> {
     const useExternalServer = config.get<boolean>('webInterface.useExternalServer', false);
 
     // Run core checks concurrently
-    const [claude, python, wrapper] = await Promise.all([
+    const [claude, pythonResult, wrapper] = await Promise.all([
         checkClaudeInstallation(),
-        checkPythonInstallation(),
+        checkPythonInstallation().catch(error => ({
+            available: false,
+            error: error.message,
+            installInstructions: getPythonInstallInstructions()
+        })),
         checkPtyWrapperAvailability()
     ]);
+    
+    const python = pythonResult;
 
     let ngrok;
     if (useExternalServer) {

@@ -10,6 +10,13 @@ export interface DependencyCheckResult {
     installInstructions?: string;
 }
 
+export class DependencyError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'DependencyError';
+    }
+}
+
 export interface DependencyCheckResults {
     claude: DependencyCheckResult;
     python: DependencyCheckResult;
