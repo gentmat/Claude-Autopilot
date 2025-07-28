@@ -1035,9 +1035,9 @@ async function handleWorkspaceFilesRequest(query: string, page: number = 1, page
             pagination: {
                 page: page,
                 pageSize: pageSize,
-                total: results.length,
+                totalResults: results.length,
                 totalPages: Math.ceil(results.length / pageSize),
-                hasMore: endIndex < results.length
+                hasNextPage: endIndex < results.length
             }
         });
 

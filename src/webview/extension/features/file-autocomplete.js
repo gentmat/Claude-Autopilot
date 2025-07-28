@@ -70,7 +70,7 @@ export function showFileAutocomplete(textarea, atPosition) {
     
   // Request files from extension
   fileAutocompleteState.currentPage = 0;
-  sendGetWorkspaceFiles('', 0);
+  sendGetWorkspaceFiles('', 1);
 }
 
 export function hideFileAutocomplete() {
@@ -104,7 +104,7 @@ export function updateFileAutocomplete(query) {
   fileAutocompleteState.currentPage = 0;
     
   // Request filtered files from extension
-  sendGetWorkspaceFiles(query, 0);
+  sendGetWorkspaceFiles(query, 1);
 }
 
 export function renderFileAutocomplete(files, pagination = null) {
@@ -248,7 +248,7 @@ function loadMoreFiles() {
         
     sendGetWorkspaceFiles(
       fileAutocompleteState.query,
-      fileAutocompleteState.currentPage
+      fileAutocompleteState.currentPage + 1
     );
         
     // Reset loading flag after request
