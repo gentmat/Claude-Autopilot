@@ -120,7 +120,7 @@ export function addMessageToQueueFromWebview(message: string): void {
     tryAutoStartProcessing();
 }
 
-function tryAutoStartProcessing(): void {
+export function tryAutoStartProcessing(): void {
     const hasProcessingMessages = messageQueue.some(msg => msg.status === 'processing');
     const hasPendingMessages = messageQueue.some(msg => msg.status === 'pending');
     const hasWaitingMessages = messageQueue.some(msg => msg.status === 'waiting');

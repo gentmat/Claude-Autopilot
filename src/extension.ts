@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import {
     claudePanel, isRunning, setClaudePanel, setIsRunning,
     setExtensionContext, setDebugMode, isDevelopmentMode, developmentOnly,
-    getValidatedConfig, showConfigValidationStatus, resetConfigToDefaults, watchConfigChanges
+    getValidatedConfig, showConfigValidationStatus, resetConfigToDefaults, watchConfigChanges, debugMode
 } from './core';
 import { updateWebviewContent, updateSessionState, getWebviewContent, sendHistoryVisibilitySettings } from './ui';
 import { startClaudeSession, resetClaudeSession, handleClaudeKeypress, startProcessingQueue, stopProcessingQueue, flushClaudeOutput, clearClaudeOutput } from './claude';
@@ -43,7 +43,23 @@ export function activate(context: vscode.ExtensionContext) {
     // Start watching for configuration changes
     configWatcher = watchConfigChanges((newConfig) => {
         setDebugMode(newConfig.developmentMode);
-        debugLog('= Configuration updated and applied');
+        debugLog('= Configuration updated and applied');
+        
+        // Update UI immediately when settings change
+        if (claudePanel) {
+            claudePanel.webview.postMessage({
+                command: 'setDevelopmentModeSetting',
+                enabled: newConfig.developmentMode
+            });
+            claudePanel.webview.postMessage({
+                command: 'setSkipPermissionsSetting',
+                enabled: newConfig.session.skipPermissions
+            });
+            claudePanel.webview.postMessage({
+                command: 'setHistoryVisibility',
+                showInUI: newConfig.history.showInUI
+            });
+        }
     });
 
     // Load pending queue from previous sessions
@@ -270,6 +286,89 @@ export function activate(context: vscode.ExtensionContext) {
                                 showErrorFromException(error, Messages.FAILED_TO_OPEN_SETTINGS);
                             }
                             break;
+                        case 'getDevelopmentModeSetting':
+                            try {
+                                const config = getValidatedConfig();
+                                panel.webview.postMessage({
+                                    command: 'setDevelopmentModeSetting',
+                                    enabled: config.developmentMode
+                                });
+                            } catch (error) {
+                                debugLog(`Error getting development mode setting: ${error}`);
+                            }
+                            break;
+                        case 'getSkipPermissionsSetting':
+                            try {
+                                const config = getValidatedConfig();
+                                panel.webview.postMessage({
+                                    command: 'setSkipPermissionsSetting',
+                                    enabled: config.session.skipPermissions
+                                });
+                            } catch (error) {
+                                debugLog(`Error getting skip permissions setting: ${error}`);
+                            }
+                            break;
+                        case 'updateSkipPermissionsSetting':
+                            try {
+                                const workspaceConfig = vscode.workspace.getConfiguration('claudeAutopilot');
+                                await workspaceConfig.update('session.skipPermissions', message.enabled);
+                                debugLog(`Updated skipPermissions setting to: ${message.enabled}`);
+                            } catch (error) {
+                                debugLog(`Error updating skip permissions setting: ${error}`);
+                                showErrorFromException(error, 'Failed to update skip permissions setting');
+                            }
+                            break;
+                        case 'getHistoryVisibilitySetting':
+                            try {
+                                const config = getValidatedConfig();
+                                panel.webview.postMessage({
+                                    command: 'setHistoryVisibility',
+                                    showInUI: config.history.showInUI
+                                });
+                            } catch (error) {
+                                debugLog(`Error getting history visibility setting: ${error}`);
+                            }
+                            break;
+                        case 'simulateUsageLimit':
+                            try {
+                                const { simulateUsageLimit } = await import('./services/usage');
+                                simulateUsageLimit();
+                                showInfo('Usage limit simulation started (10 seconds)');
+                            } catch (error) {
+                                debugLog(`Error simulating usage limit: ${error}`);
+                                showErrorFromException(error, 'Failed to simulate usage limit');
+                            }
+                            break;
+                        case 'clearAllTimers':
+                            try {
+                                const { clearAllTimers } = await import('./services/usage');
+                                clearAllTimers();
+                                showInfo('All timers cleared');
+                            } catch (error) {
+                                debugLog(`Error clearing timers: ${error}`);
+                                showErrorFromException(error, 'Failed to clear timers');
+                            }
+                            break;
+                        case 'debugQueueState':
+                            try {
+                                const { debugQueueState } = await import('./services/usage');
+                                debugQueueState();
+                            } catch (error) {
+                                debugLog(`Error debugging queue state: ${error}`);
+                                showErrorFromException(error, 'Failed to debug queue state');
+                            }
+                            break;
+                        case 'toggleDebugLogging':
+                            try {
+                                const newDebugMode = !debugMode;
+                                
+                                setDebugMode(newDebugMode);
+                                showInfo(`Debug logging ${newDebugMode ? 'enabled' : 'disabled'}`);
+                            } catch (error) {
+                                debugLog(`Error toggling debug logging: ${error}`);
+                                showErrorFromException(error, 'Failed to toggle debug logging');
+                            }
+                            break;
                         default:
                             debugLog(`⚠️ Unknown webview command: ${message.command}`);
                     }
@@ -282,6 +381,19 @@ export function activate(context: vscode.ExtensionContext) {
             updateWebviewContent();
             sendSecuritySettings();
             sendHistoryVisibilitySettings();
+            
+            // Send development mode setting and skip permissions setting
+            setTimeout(() => {
+                const config = getValidatedConfig();
+                panel.webview.postMessage({
+                    command: 'setDevelopmentModeSetting',
+                    enabled: config.developmentMode
+                });
+                panel.webview.postMessage({
+                    command: 'setSkipPermissionsSetting',
+                    enabled: config.session.skipPermissions
+                });
+            }, 150);
 
             // Auto-start session if configured
             const autoStart = config.session.autoStart;

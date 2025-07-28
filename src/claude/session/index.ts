@@ -174,11 +174,18 @@ export async function startClaudeSession(skipPermissions: boolean = true): Promi
         const hasPermissionPrompt = permissionPrompts.some(prompt => output.includes(prompt));
         
         if (hasPermissionPrompt && !sessionReady) {
-            debugLog('ðŸ” Permission prompt detected during startup - session ready for user interaction');
+            debugLog('Ÿ” Permission prompt detected during startup - session ready for user interaction');
             setSessionReady(true);
             startHealthCheck();
             startSleepPrevention();
             updateSessionState();
+            
+            // Check for pending messages to auto-start
+            setTimeout(() => {
+                const { tryAutoStartProcessing } = require('../../queue/manager');
+                tryAutoStartProcessing();
+            }, 500);
+            
             vscode.window.showInformationMessage('Claude is asking for permission. Use the Claude output area to navigate and select your choice.');
         } else if (output.includes('? for shortcuts') && !sessionReady) {
             debugLog('âœ… Claude ready prompt detected during startup');
@@ -186,6 +193,13 @@ export async function startClaudeSession(skipPermissions: boolean = true): Promi
             startHealthCheck();
             startSleepPrevention();
             updateSessionState();
+            
+            // Check for pending messages to auto-start
+            setTimeout(() => {
+                const { tryAutoStartProcessing } = require('../../queue/manager');
+                tryAutoStartProcessing();
+            }, 500);
+            
             vscode.window.showInformationMessage('Claude session started and ready! You can now process the message queue.');
         }
     });

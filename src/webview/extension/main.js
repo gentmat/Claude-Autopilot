@@ -3,6 +3,7 @@ import { addMessage } from './ui/session-controls.js';
 import { updateButtonStates } from './ui/queue-manager.js';
 import { loadHistory } from './features/history-manager.js';
 import { requestDevelopmentModeSetting } from './features/development-tools.js';
+import { sendGetSkipPermissionsSetting, sendUpdateSkipPermissionsSetting, sendGetHistoryVisibilitySetting } from './communication/vscode-api.js';
 import { requestWebServerStatus, startWebServerStatusPolling } from './features/web-interface.js';
 import { setupMessageHandler } from './communication/message-handler.js';
 import { 
@@ -27,6 +28,12 @@ function initialize() {
   // Check if development mode is enabled
   requestDevelopmentModeSetting();
   
+  // Request initial skip permissions setting
+  sendGetSkipPermissionsSetting();
+  
+  // Request initial history visibility setting
+  sendGetHistoryVisibilitySetting();
+  
   // Request initial web server status and start polling
   requestWebServerStatus();
   startWebServerStatusPolling();
@@ -42,6 +49,9 @@ function initialize() {
   
   // Set up cleanup handlers
   setupCleanupHandlers();
+  
+  // Set up skip permissions change handler
+  setupSkipPermissionsHandler();
 }
 
 function setupKeyboardHandlers() {
@@ -160,6 +170,17 @@ function setupCleanupHandlers() {
     flushPendingClaudeOutput();
   });
 }
+
+function setupSkipPermissionsHandler() {
+  // Handle changes to the skip permissions checkbox
+  const skipPermissionsCheckbox = document.getElementById('skipPermissions');
+  if (skipPermissionsCheckbox) {
+    skipPermissionsCheckbox.addEventListener('change', function(event) {
+      sendUpdateSkipPermissionsSetting(event.target.checked);
+    });
+  }
+}
+
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', initialize);

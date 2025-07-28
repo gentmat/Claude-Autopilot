@@ -38,6 +38,12 @@ export function setupMessageHandler() {
     case 'setDevelopmentModeSetting':
       updateDevelopmentModeUI(message.enabled);
       break;
+    case 'setSkipPermissionsSetting':
+      const skipPermissionsCheckbox = document.getElementById('skipPermissions');
+      if (skipPermissionsCheckbox) {
+        skipPermissionsCheckbox.checked = message.enabled;
+      }
+      break;
     case 'webServerStatusUpdate':
       updateWebServerStatusFromMessage(message.status);
       break;

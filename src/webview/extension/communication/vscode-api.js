@@ -83,6 +83,19 @@ export function sendGetDevelopmentModeSetting() {
   sendMessageToVSCode('getDevelopmentModeSetting');
 }
 
+export function sendGetSkipPermissionsSetting() {
+  sendMessageToVSCode('getSkipPermissionsSetting');
+}
+
+export function sendUpdateSkipPermissionsSetting(enabled) {
+  sendMessageToVSCode('updateSkipPermissionsSetting', { enabled });
+}
+
+export function sendGetHistoryVisibilitySetting() {
+  sendMessageToVSCode('getHistoryVisibilitySetting');
+}
+
+
 export function sendSimulateUsageLimit() {
   sendMessageToVSCode('simulateUsageLimit');
 }
