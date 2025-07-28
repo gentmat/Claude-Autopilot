@@ -37,7 +37,7 @@ export function sendToWebviewTerminal(output: string): void {
                 output: output
             });
         } catch (error) {
-            debugLog(`❌ Failed to send to webview terminal: ${error}`);
+            console.error(`❌ Failed to send to webview terminal: ${error}`);
         }
     }
 }

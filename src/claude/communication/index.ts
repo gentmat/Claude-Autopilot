@@ -1,11 +1,13 @@
 import * as vscode from 'vscode';
 import { MessageItem } from '../../core/types';
-import { messageQueue, claudeProcess, sessionReady, processingQueue, currentMessage, setCurrentMessage, setProcessingQueue } from '../../core/state';
+import { messageQueue, claudeProcess, sessionReady, processingQueue, currentMessage, setCurrentMessage, setProcessingQueue, setIsRunning } from '../../core/state';
 import { debugLog } from '../../utils/logging';
+import { getErrorMessage } from '../../utils/error-handler';
 import { updateWebviewContent, updateSessionState } from '../../ui/webview';
-import { saveWorkspaceHistory, ensureHistoryRun, updateMessageStatusInHistory } from '../../queue/processor/history';
+import { saveWorkspaceHistory, ensureHistoryRun, updateMessageStatusInHistory, checkAndEndHistoryRunIfComplete } from '../../queue/processor/history';
 import { TIMEOUT_MS, ANSI_CLEAR_SCREEN_PATTERNS } from '../../core/constants';
 import { startClaudeSession } from '../../claude/session';
+import { getMobileServer } from '../../services/mobile/index';
 
 export async function processNextMessage(): Promise<void> {
     debugLog('--- PROCESSING NEXT MESSAGE ---');
@@ -29,6 +31,8 @@ export async function processNextMessage(): Promise<void> {
     const message = messageQueue.find(m => m.status === 'pending');
     if (!message) {
         debugLog('No pending messages found - processing remains active for new messages');
+        // Check if we should end the current history run since queue is complete
+        checkAndEndHistoryRunIfComplete();
         updateWebviewContent();
         updateSessionState();
         vscode.window.showInformationMessage('No pending messages to process. Processing remains active.');
@@ -39,22 +43,52 @@ export async function processNextMessage(): Promise<void> {
         debugLog('❌ Claude process not available');
         vscode.window.showWarningMessage('Claude session not started. Please start Claude session first.');
         setProcessingQueue(false);
+        setIsRunning(false);
         return;
     }
 
     if (!sessionReady) {
-        debugLog('❌ Claude session not ready');
-        vscode.window.showWarningMessage('Claude session not ready. Please wait for Claude to be ready first.');
-        setProcessingQueue(false);
+        debugLog('❌ Claude session not ready - waiting for session to become ready...');
+        
+        // Wait for session to become ready instead of stopping processing
+        const waitForReady = setInterval(() => {
+            if (sessionReady) {
+                clearInterval(waitForReady);
+                processNextMessage();
+            }
+        }, 1000);
+        
+        // Timeout after 30 seconds
+        setTimeout(() => {
+            clearInterval(waitForReady);
+            if (!sessionReady) {
+                debugLog('❌ Timeout waiting for session to be ready');
+                vscode.window.showWarningMessage('Claude session failed to become ready. Please restart the session.');
+                setProcessingQueue(false);
+                setIsRunning(false);
+            }
+        }, 30000);
+        
         return;
     }
 
     debugLog(`📋 Processing message #${message.id}: ${message.text.substring(0, 50)}...`);
     message.status = 'processing';
+    message.processingStartedAt = new Date().toISOString();
     updateMessageStatusInHistory(message.id, 'processing');
     setCurrentMessage(message);
     updateWebviewContent();
     saveWorkspaceHistory();
+    
+    // Notify mobile clients of queue update
+    try {
+        const mobileServer = getMobileServer();
+        if (mobileServer.isRunning()) {
+            mobileServer.notifyQueueUpdate();
+        }
+    } catch (error) {
+        // Silently fail if mobile service isn't available
+    }
 
     try {
         debugLog('⏰ Claude is ready, sending message...');
@@ -72,6 +106,16 @@ export async function processNextMessage(): Promise<void> {
         updateWebviewContent();
         saveWorkspaceHistory();
         
+        // Notify mobile clients of queue update
+        try {
+            const mobileServer = getMobileServer();
+            if (mobileServer.isRunning()) {
+                mobileServer.notifyQueueUpdate();
+            }
+        } catch (error) {
+            // Silently fail if mobile service isn't available
+        }
+        
         setTimeout(() => {
             debugLog('Processing next message after delay...');
             processNextMessage();
@@ -80,13 +124,23 @@ export async function processNextMessage(): Promise<void> {
     } catch (error) {
         debugLog(`❌ Error processing message #${message.id}: ${error}`);
         
-        const errorString = error instanceof Error ? error.message : String(error);
+        const errorString = getErrorMessage(error);
         
         message.status = 'error';
         message.error = `Processing failed: ${errorString}`;
         updateMessageStatusInHistory(message.id, 'error', undefined, message.error);
         updateWebviewContent();
         saveWorkspaceHistory();
+        
+        // Notify mobile clients of queue update
+        try {
+            const mobileServer = getMobileServer();
+            if (mobileServer.isRunning()) {
+                mobileServer.notifyQueueUpdate();
+            }
+        } catch (error) {
+            // Silently fail if mobile service isn't available
+        }
         
         setTimeout(() => {
             processNextMessage();
@@ -353,6 +407,7 @@ export async function startProcessingQueue(skipPermissions: boolean = true): Pro
                 if (sessionReady) {
                     clearInterval(checkReadyInterval);
                     setProcessingQueue(true);
+                    setIsRunning(true);
                     updateSessionState();
                     processNextMessage();
                 }
@@ -369,12 +424,11 @@ export async function startProcessingQueue(skipPermissions: boolean = true): Pro
         return;
     }
 
-    debugLog(`🔄 Setting processingQueue to true, current queue length: ${messageQueue.length}`);
     setProcessingQueue(true);
+    setIsRunning(true);
     updateSessionState();
     
     if (messageQueue.length === 0) {
-        debugLog('📭 Queue is empty after starting processing - waiting for messages');
         vscode.window.showInformationMessage('Claude session is ready. Add messages to start processing.');
         return;
     }
@@ -384,12 +438,16 @@ export async function startProcessingQueue(skipPermissions: boolean = true): Pro
 
 export function stopProcessingQueue(): void {
     setProcessingQueue(false);
+    setIsRunning(false);
     setCurrentMessage(null);
     
     if (claudeProcess && claudeProcess.stdin) {
         debugLog('⌨️ Sending ESC to Claude to cancel current operation');
         claudeProcess.stdin.write('\x1b');
     }
+    
+    // Check if we should end the current history run when processing is manually stopped
+    checkAndEndHistoryRunIfComplete();
     
     updateWebviewContent();
     updateSessionState();

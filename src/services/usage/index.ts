@@ -284,7 +284,7 @@ export function simulateUsageLimit(): void {
         return;
     }
     
-    debugLog('🧪 Simulating usage limit with 1-minute wait');
+    debugLog('🧪 Simulating usage limit with 10 seconds wait');
     
     setProcessingQueue(false);
     

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { MessageItem } from '../../core/types';
-import { messageQueue, queueSortConfig, claudePanel, setQueueSortConfig, processingQueue, sessionReady, setProcessingQueue } from '../../core/state';
+import { messageQueue, claudePanel, processingQueue, sessionReady, setProcessingQueue, setIsRunning } from '../../core/state';
 import { debugLog } from '../../utils/logging';
 import { updateWebviewContent } from '../../ui/webview';
 import { processNextMessage } from '../../claude/communication';
@@ -28,11 +28,22 @@ export function duplicateMessageInQueue(messageId: string): void {
             status: 'pending'
         };
         
-        const originalIndex = messageQueue.findIndex(msg => msg.id === messageId);
-        messageQueue.splice(originalIndex + 1, 0, duplicatedMessage);
+        // Smart insertion based on original message status
+        if (message.status === 'completed') {
+            // If duplicating a completed message, add at end of queue (after last pending)
+            messageQueue.push(duplicatedMessage);
+        } else {
+            // If duplicating a processing/pending message, add after original
+            const originalIndex = messageQueue.findIndex(msg => msg.id === messageId);
+            messageQueue.splice(originalIndex + 1, 0, duplicatedMessage);
+        }
         
         updateWebviewContent();
         savePendingQueue(); // Save queue changes
+        
+        // Try to auto-start processing if conditions are met
+        tryAutoStartProcessing();
+        
         vscode.window.showInformationMessage(`Message duplicated: ${message.text.substring(0, 50)}...`);
     }
 }
@@ -66,43 +77,9 @@ export function reorderQueue(fromIndex: number, toIndex: number): void {
     messageQueue.splice(toIndex, 0, movedItem);
     
     updateWebviewContent();
+    savePendingQueue();
 }
 
-export function sortQueue(field: 'timestamp' | 'status' | 'text', direction: 'asc' | 'desc'): void {
-    setQueueSortConfig({ field, direction });
-    
-    messageQueue.sort((a, b) => {
-        let comparison = 0;
-        
-        switch (field) {
-            case 'timestamp':
-                comparison = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-                break;
-            case 'status':
-                const statusOrder = { 'pending': 0, 'processing': 1, 'waiting': 2, 'completed': 3, 'error': 4 };
-                comparison = statusOrder[a.status] - statusOrder[b.status];
-                break;
-            case 'text':
-                comparison = a.text.localeCompare(b.text);
-                break;
-        }
-        
-        return direction === 'desc' ? -comparison : comparison;
-    });
-    
-    updateWebviewContent();
-    
-    if (claudePanel) {
-        try {
-            claudePanel.webview.postMessage({
-                command: 'queueSorted',
-                sortConfig: queueSortConfig
-            });
-        } catch (error) {
-            debugLog(`❌ Failed to send queue sort config to webview: ${error}`);
-        }
-    }
-}
 
 export function clearMessageQueue(): void {
     messageQueue.length = 0;
@@ -143,7 +120,7 @@ export function addMessageToQueueFromWebview(message: string): void {
     tryAutoStartProcessing();
 }
 
-function tryAutoStartProcessing(): void {
+export function tryAutoStartProcessing(): void {
     const hasProcessingMessages = messageQueue.some(msg => msg.status === 'processing');
     const hasPendingMessages = messageQueue.some(msg => msg.status === 'pending');
     const hasWaitingMessages = messageQueue.some(msg => msg.status === 'waiting');
@@ -169,6 +146,7 @@ function tryAutoStartProcessing(): void {
         if (!processingQueue) {
             debugLog('🚀 Auto-enabling processing for first message in ready session');
             setProcessingQueue(true);
+            setIsRunning(true);
         }
         debugLog('🚀 Auto-starting queue processing - conditions met');
         setTimeout(() => {
