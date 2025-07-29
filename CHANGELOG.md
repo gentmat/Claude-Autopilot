@@ -5,7 +5,20 @@ All notable changes to the Claude Autopilot extension will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.1] - 2025-01-15
+## [0.1.2] - 2025-07-29
+
+### ✨ Added
+
+- **Web Interface**: Mobile web interface with QR code access and external server support
+- **File Explorer API**: Full file system browsing through web interface
+- **Git Interface**: Complete git operations management through web interface
+- **Claude Web Interface**: Direct Claude CLI interaction from mobile devices
+
+### 🔧 Fixed
+
+- **Python Missing Error on Windows**: Fixed Python detection issues (#11)
+
+## [0.1.1] - 2025-07-15
 
 ### ✨ Added
 

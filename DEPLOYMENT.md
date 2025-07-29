@@ -6,7 +6,7 @@ This guide covers how to deploy Claude Autopilot to the VS Code Marketplace.
 
 - **Extension Name**: claude-autopilot
 - **Display Name**: Claude Autopilot  
-- **Version**: 0.1.0
+- **Version**: 0.1.2
 - **Publisher**: benbasha
 - **Package Size**: ~53 KB
 - **Files**: 32 files (optimized)
@@ -39,7 +39,7 @@ This guide covers how to deploy Claude Autopilot to the VS Code Marketplace.
 - [x] Cross-platform compatibility verified
 
 ### ✅ **Marketplace Preparation**
-- [x] VSIX package created (claude-autopilot-0.0.1.vsix)
+- [x] VSIX package created (claude-autopilot-0.1.2.vsix)
 - [x] Package size optimized (53 KB)
 - [x] Unwanted files excluded (.history, .idea, src/)
 - [x] Essential files included (out/, README, CHANGELOG, LICENSE)
@@ -98,7 +98,7 @@ vsce publish major  # 3.0.0
 - Go to [Visual Studio Marketplace](https://marketplace.visualstudio.com/manage)
 - Sign in with Microsoft account
 - Click "New Extension" → "Visual Studio Code"
-- Upload the `claude-autopilot-2.0.0.vsix` file
+- Upload the `claude-autopilot-0.1.2.vsix` file
 - Fill in marketplace details
 
 ## 📊 Marketplace Configuration
@@ -169,13 +169,13 @@ vsce unpublish benbasha.claude-autopilot
 vsce show benbasha.claude-autopilot
 
 # Package without publishing
-vsce package --out claude-autopilot-v0.0.1.vsix
+vsce package --out claude-autopilot-v0.1.2.vsix
 ```
 
 ## 📁 Package Contents
 
 ```
-claude-autopilot-0.0.1.vsix (53.44 KB)
+claude-autopilot-0.1.2.vsix (53.44 KB)
 ├── extension.vsixmanifest
 ├── [Content_Types].xml
 └── extension/

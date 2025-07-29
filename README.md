@@ -1,7 +1,7 @@
 # Claude Autopilot - Automated Claude Code Task Management
 
 [![VS Code Marketplace](https://img.shields.io/badge/VS%20Code-Marketplace-brightgreen)](https://marketplace.visualstudio.com/items?itemName=benbasha.claude-autopilot)
-[![Version](https://img.shields.io/badge/version-0.1.1-blue)](https://github.com/benbasha/Claude-Autopilot/releases/tag/v0.1.1)
+[![Version](https://img.shields.io/badge/version-0.1.2-blue)](https://github.com/benbasha/Claude-Autopilot/releases/tag/v0.1.2)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 **Claude Autopilot** lets you run Claude Code while you sleep, eat, or play with your kids. Set up your tasks, hit start, and come back to completed work. This powerful VS Code extension provides fully automated Claude Code task management with intelligent queue processing and auto-resume functionality.
@@ -40,9 +40,11 @@
 ### 📊 **Rich User Interface**
 
 -   **Interactive Webview**: Intuitive interface for managing queues and monitoring progress
--   **Real-time Updates**: Live status updates and progress tracking
+-   **Mobile Web Interface**: Complete web-based interface for remote access and control
+-   **Real-time Updates**: Live status updates and progress tracking via WebSocket
 -   **History Browser**: Browse and filter previous processing runs
 -   **Command Palette**: Quick access to all Claude Autopilot commands
+-   **QR Code Access**: Easy mobile access via QR code scanning
 
 ## 🚀 Quick Start
 
@@ -56,7 +58,7 @@
 
 1. Install from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=benbasha.claude-autopilot)
 2. Or install via command palette: `Extensions: Install Extensions` → Search "Claude Autopilot"
-3. Or install from VSIX: `code --install-extension claude-autopilot-0.0.1.vsix`
+3. Or install from VSIX: `code --install-extension claude-autopilot-0.1.2.vsix`
 4. **Cursor**: Claude Autopilot works seamlessly in Cursor with the same installation process
 
 ### Basic Usage
@@ -74,6 +76,9 @@
 | `Claude: Start Claude Autopilot` | Start the Claude Autopilot interface and session |
 | `Claude: Stop Claude Autopilot`  | Stop Claude Autopilot and close the session      |
 | `Claude: Add Message to Queue`   | Add a new message to the processing queue        |
+| `Claude: Start Web Interface`    | Start the web interface for mobile access       |
+| `Claude: Stop Web Interface`     | Stop the web interface server                   |
+| `Claude: Show Web Interface QR Code` | Display QR code for easy mobile access      |
 
 ## ⚙️ Configuration
 
@@ -112,8 +117,16 @@ Claude Autopilot offers extensive configuration options. Access settings via `Fi
 {
     "claudeAutopilot.history.maxRuns": 20,
     "claudeAutopilot.history.autoSave": true,
-    "claudeAutopilot.logging.enabled": false,
-    "claudeAutopilot.logging.level": "info"
+    "claudeAutopilot.history.showInUI": false
+}
+```
+
+### Web Interface
+
+```json
+{
+    "claudeAutopilot.webInterface.useExternalServer": false,
+    "claudeAutopilot.webInterface.password": ""
 }
 ```
 

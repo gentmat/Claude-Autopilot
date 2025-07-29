@@ -114,7 +114,8 @@ export function activate(context: vscode.ExtensionContext) {
                 {
                     enableScripts: true,
                     localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'out', 'webview')],
-                    retainContextWhenHidden: true
+                    retainContextWhenHidden: true,
+                    enableCommandUris: true
                 }
             );
 
@@ -494,7 +495,8 @@ export function activate(context: vscode.ExtensionContext) {
                     vscode.ViewColumn.Two,
                     {
                         enableScripts: true,
-                        retainContextWhenHidden: true
+                        retainContextWhenHidden: true,
+                        enableCommandUris: true
                     }
                 );
 
@@ -745,7 +747,8 @@ export function activate(context: vscode.ExtensionContext) {
                     vscode.ViewColumn.Two,
                     {
                         enableScripts: true,
-                        retainContextWhenHidden: true
+                        retainContextWhenHidden: true,
+                        enableCommandUris: true
                     }
                 );
 
