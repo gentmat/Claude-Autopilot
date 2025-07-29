@@ -185,11 +185,11 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile && npm run copy-deps",
+    "vscode:prepublish": "DEBUG_MODE=false npm run compile && npm run copy-deps",
     "compile": "tsc -p ./ && cp src/claude_pty_wrapper.py out/claude/session/ && cp -r src/webview out/",
     "copy-deps": "mkdir -p out/node_modules && cp -r node_modules/* out/node_modules/ 2>/dev/null || true",
     "watch": "tsc -watch -p ./",
-    "package": "vsce package",
+    "package": "DEBUG_MODE=false vsce package",
     "publish": "vsce publish",
     "prepackage": "npm run compile",
     "lint": "eslint src/webview/ --ext .js --ignore-pattern 'src/webview/extension/**'",
