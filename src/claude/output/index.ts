@@ -3,6 +3,11 @@ import { CLAUDE_OUTPUT_THROTTLE_MS, CLAUDE_OUTPUT_AUTO_CLEAR_MS, CLAUDE_OUTPUT_M
 import { debugLog, formatTerminalOutput, sendToWebviewTerminal } from '../../utils/logging';
 import { getMobileServer } from '../../services/mobile/index';
 
+// Debouncing for repeated debug messages
+let lastClearScreenLogTime = 0;
+let clearScreenLogCount = 0;
+const CLEAR_SCREEN_LOG_DEBOUNCE_MS = 1000; // Only log once per second
+
 export function sendClaudeOutput(output: string): void {
     setClaudeOutputBuffer(claudeOutputBuffer + output);
     
@@ -23,7 +28,20 @@ export function sendClaudeOutput(output: string): void {
     }
     
     if (foundClearScreen) {
-        debugLog(`🖥️  Clear screen detected - reset screen buffer`);
+        // Debounce clear screen debug messages to prevent spam
+        const now = Date.now();
+        if (now - lastClearScreenLogTime >= CLEAR_SCREEN_LOG_DEBOUNCE_MS) {
+            if (clearScreenLogCount > 0) {
+                debugLog(`🖥️  Clear screen detected - reset screen buffer (${clearScreenLogCount + 1} times in last second)`);
+            } else {
+                debugLog(`🖥️  Clear screen detected - reset screen buffer`);
+            }
+            lastClearScreenLogTime = now;
+            clearScreenLogCount = 0;
+        } else {
+            clearScreenLogCount++;
+        }
+        
         const newScreen = claudeOutputBuffer.substring(lastClearScreenIndex);
         setClaudeCurrentScreen(newScreen);
         setClaudeOutputBuffer(claudeCurrentScreen);

@@ -1,6 +1,7 @@
 // Terminal and Claude output processing and rendering
 import { 
   CLAUDE_RENDER_THROTTLE_MS,
+  getClaudeRenderThrottleMs,
   setDebugTerminalContent,
   setClaudeContent,
   setLastRenderedContent,
@@ -19,10 +20,13 @@ import {
   getClaudeRenderTimer,
   getLastClaudeRenderTime,
   getLastParsedContent,
-  getLastParsedHtml
+  getLastParsedHtml,
+  setLastContentHash,
+  getLastContentHash
 } from '../core/state.js';
 import { createSafeElement } from '../security/validation.js';
 import { parseAnsiToHtml } from '../utils/ansi-parser.js';
+import { isDevelopmentMode } from '../core/state.js';
 
 // Store terminal content separately
 export function appendToTerminal(output) {
@@ -74,25 +78,32 @@ export function appendToClaudeOutput(output) {
     // Store the latest output
     setPendingClaudeOutput(output);
         
-    // Check if we need to throttle
+    // Check if we need to throttle (use dynamic throttling)
     const now = Date.now();
     const timeSinceLastRender = now - getLastClaudeRenderTime();
+    const throttleMs = getClaudeRenderThrottleMs();
         
-    if (timeSinceLastRender >= CLAUDE_RENDER_THROTTLE_MS) {
+    if (timeSinceLastRender >= throttleMs) {
       // Enough time has passed, render immediately
-      console.log('🎨 Rendering Claude output immediately');
+      if (isDevelopmentMode) {
+        console.log('🎨 Rendering Claude output immediately');
+      }
       renderClaudeOutput();
     } else {
       // Schedule a delayed render if not already scheduled
       if (!getClaudeRenderTimer()) {
-        const delay = CLAUDE_RENDER_THROTTLE_MS - timeSinceLastRender;
-        console.log(`⏰ Throttling Claude render for ${delay}ms`);
+        const delay = throttleMs - timeSinceLastRender;
+        if (isDevelopmentMode) {
+          console.log(`⏰ Throttling Claude render for ${delay}ms`);
+        }
         const timer = setTimeout(() => {
           renderClaudeOutput();
         }, delay);
         setClaudeRenderTimer(timer);
       } else {
-        console.log('🔄 Claude render already scheduled, updating pending output');
+        if (isDevelopmentMode) {
+          console.log('🔄 Claude render already scheduled, updating pending output');
+        }
       }
     }
   } catch (error) {
@@ -115,7 +126,9 @@ export function renderClaudeOutput() {
     setClaudeRenderTimer(null);
   }
     
-  console.log(`🎨 Rendering Claude output (${output.length} chars)`);
+  if (isDevelopmentMode) {
+    console.log(`🎨 Rendering Claude output (${output.length} chars)`);
+  }
     
   // Now perform the actual rendering
   performClaudeRender(output);
@@ -167,8 +180,11 @@ export function performClaudeRender(output) {
       claudeOutput.appendChild(outputElement);
     } else {
       // No clear screen - this is the complete current screen content from backend
-      // Only update if content has actually changed
-      if (output !== getLastRenderedContent()) {
+      // Create content hash for more efficient change detection
+      const contentHash = output.length + '_' + (output.slice(0, 100) + output.slice(-100));
+      
+      // Only update if content has actually changed (using hash for efficiency)
+      if (contentHash !== getLastContentHash()) {
         setClaudeContent(output);
         setLastRenderedContent(output);
                 
@@ -176,21 +192,37 @@ export function performClaudeRender(output) {
         let htmlOutput;
         if (output === getLastParsedContent() && getLastParsedHtml()) {
           htmlOutput = getLastParsedHtml();
-          console.log('📋 Using cached ANSI parsing result');
+          if (isDevelopmentMode) {
+            console.log('📋 Using cached ANSI parsing result');
+          }
         } else {
           // Parse and cache the result
           htmlOutput = parseAnsiToHtml(getClaudeContent());
           setLastParsedContent(output);
           setLastParsedHtml(htmlOutput);
-          console.log('🔄 Parsing ANSI content');
+          if (isDevelopmentMode) {
+            console.log('🔄 Parsing ANSI content');
+          }
         }
                 
-        // Replace the content efficiently
-        claudeOutput.innerHTML = '';
-        const outputElement = document.createElement('div');
-        outputElement.style.cssText = 'white-space: pre; word-wrap: break-word; line-height: 1.4; font-family: inherit;';
-        outputElement.innerHTML = htmlOutput;
-        claudeOutput.appendChild(outputElement);
+        // Optimize DOM updates - only update if HTML content actually changed
+        let existingElement = claudeOutput.querySelector('.claude-content');
+        if (!existingElement) {
+          // First time setup
+          claudeOutput.innerHTML = '';
+          existingElement = document.createElement('div');
+          existingElement.className = 'claude-content';
+          existingElement.style.cssText = 'white-space: pre; word-wrap: break-word; line-height: 1.4; font-family: inherit;';
+          claudeOutput.appendChild(existingElement);
+        }
+        
+        // Only update DOM if content actually changed
+        if (existingElement.innerHTML !== htmlOutput) {
+          existingElement.innerHTML = htmlOutput;
+        }
+        
+        // Update content hash after successful render
+        setLastContentHash(contentHash);
       } else {
         // Content hasn't changed, skip rendering
         return;
@@ -200,13 +232,16 @@ export function performClaudeRender(output) {
     // Auto-scroll to bottom
     claudeOutput.scrollTop = claudeOutput.scrollHeight;
 
-    // Highlight the Claude output section briefly with new colors
-    claudeOutput.style.borderColor = '#00ff88';
-    claudeOutput.style.boxShadow = '0 0 20px rgba(0, 255, 136, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1)';
-    setTimeout(() => {
-      claudeOutput.style.borderColor = '#4a9eff';
-      claudeOutput.style.boxShadow = '0 0 20px rgba(74, 158, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)';
-    }, 800);
+    // Reduce visual effects in development mode to improve performance
+    if (!isDevelopmentMode) {
+      // Highlight the Claude output section briefly with new colors (only in normal mode)
+      claudeOutput.style.borderColor = '#00ff88';
+      claudeOutput.style.boxShadow = '0 0 20px rgba(0, 255, 136, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1)';
+      setTimeout(() => {
+        claudeOutput.style.borderColor = '#4a9eff';
+        claudeOutput.style.boxShadow = '0 0 20px rgba(74, 158, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)';
+      }, 800);
+    }
   } catch (error) {
     console.error('Error performing Claude render:', error);
   }
@@ -239,7 +274,9 @@ export function clearClaudeOutput() {
 export function clearClaudeOutputUI() {
   // Same as clearClaudeOutput but called from backend
   clearClaudeOutput();
-  console.log('Claude output auto-cleared by backend');
+  if (isDevelopmentMode) {
+    console.log('Claude output auto-cleared by backend');
+  }
 }
 
 // Cleanup function to flush any pending Claude output before page closes
