@@ -27,7 +27,12 @@ let claudeRenderTimer = null;
 let lastClaudeRenderTime = 0;
 let lastParsedContent = '';
 let lastParsedHtml = '';
-const CLAUDE_RENDER_THROTTLE_MS = 500; // 500ms = 2 times per second max
+let lastContentHash = '';
+// Dynamic throttling: slower in development mode to reduce overhead
+function getClaudeRenderThrottleMs() {
+  return isDevelopmentMode ? 1000 : 500; // 1s in dev mode, 500ms in normal mode
+}
+const CLAUDE_RENDER_THROTTLE_MS = 500; // Fallback for static imports
 
 // File autocomplete state
 let fileAutocompleteState = {
@@ -96,7 +101,9 @@ export {
   lastClaudeRenderTime,
   lastParsedContent,
   lastParsedHtml,
+  lastContentHash,
   CLAUDE_RENDER_THROTTLE_MS,
+  getClaudeRenderThrottleMs,
   fileAutocompleteState,
   isDevelopmentMode,
   webServerStatus,
@@ -173,6 +180,10 @@ export function setLastParsedHtml(html) {
   lastParsedHtml = html;
 }
 
+export function setLastContentHash(hash) {
+  lastContentHash = hash;
+}
+
 // Terminal output state management
 export function setDebugTerminalContent(content) {
   debugTerminalContent = content;
@@ -215,12 +226,17 @@ export function getLastParsedHtml() {
   return lastParsedHtml;
 }
 
+export function getLastContentHash() {
+  return lastContentHash;
+}
+
 // Reset functions for clearing state
 export function resetClaudeOutputState() {
   claudeContent = '';
   lastRenderedContent = '';
   lastParsedContent = '';
   lastParsedHtml = '';
+  lastContentHash = '';
   pendingClaudeOutput = null;
   if (claudeRenderTimer) {
     clearTimeout(claudeRenderTimer);

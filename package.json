@@ -79,11 +79,6 @@
     "configuration": {
       "title": "Claude Autopilot",
       "properties": {
-        "claudeAutopilot.developmentMode": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable development mode with debug controls and testing features"
-        },
         "claudeAutopilot.queue.maxSize": {
           "type": "number",
           "default": 1000,
@@ -180,6 +175,11 @@
           "type": "string",
           "default": "",
           "description": "Password for web interface access when using external server. Leave empty for no password protection."
+        },
+        "claudeAutopilot.developmentMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable development mode with debug controls and testing features"
         }
       }
     }

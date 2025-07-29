@@ -9,6 +9,14 @@ import { TIMEOUT_MS, ANSI_CLEAR_SCREEN_PATTERNS } from '../../core/constants';
 import { startClaudeSession } from '../../claude/session';
 import { getMobileServer } from '../../services/mobile/index';
 
+// Debouncing for repeated debug messages
+let lastOutputLogTime = 0;
+let outputLogCount = 0;
+let lastClearScreenLogTime = 0;
+let clearScreenLogCount = 0;
+const OUTPUT_LOG_DEBOUNCE_MS = 1000; // Only log once per second
+const CLEAR_SCREEN_LOG_DEBOUNCE_MS = 1000; // Only log once per second
+
 export async function processNextMessage(): Promise<void> {
     debugLog('--- PROCESSING NEXT MESSAGE ---');
     
@@ -361,7 +369,19 @@ function waitForPrompt(): Promise<void> {
 
         dataListener = (data: Buffer) => {
             const output = data.toString();
-            debugLog(`📤 Claude output (${data.length} bytes)`);
+            // Debounce output debug messages to prevent spam
+            const now = Date.now();
+            if (now - lastOutputLogTime >= OUTPUT_LOG_DEBOUNCE_MS) {
+                if (outputLogCount > 0) {
+                    debugLog(`📤 Claude output (${data.length} bytes) - ${outputLogCount + 1} outputs in last second`);
+                } else {
+                    debugLog(`📤 Claude output (${data.length} bytes)`);
+                }
+                lastOutputLogTime = now;
+                outputLogCount = 0;
+            } else {
+                outputLogCount++;
+            }
             
             let foundClearScreen = false;
             for (const pattern of ANSI_CLEAR_SCREEN_PATTERNS) {
@@ -373,7 +393,19 @@ function waitForPrompt(): Promise<void> {
             
             if (foundClearScreen) {
                 currentScreenBuffer = output;
-                debugLog(`🖥️  Clear screen detected - reset screen buffer`);
+                // Debounce clear screen debug messages to prevent spam
+                const now = Date.now();
+                if (now - lastClearScreenLogTime >= CLEAR_SCREEN_LOG_DEBOUNCE_MS) {
+                    if (clearScreenLogCount > 0) {
+                        debugLog(`🖥️  Clear screen detected - reset screen buffer (${clearScreenLogCount + 1} times in last second)`);
+                    } else {
+                        debugLog(`🖥️  Clear screen detected - reset screen buffer`);
+                    }
+                    lastClearScreenLogTime = now;
+                    clearScreenLogCount = 0;
+                } else {
+                    clearScreenLogCount++;
+                }
             } else {
                 currentScreenBuffer += output;
                 
