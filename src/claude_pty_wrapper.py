@@ -5,6 +5,28 @@ import sys
 import select
 import subprocess
 import fcntl
+import platform
+
+def get_claude_command():
+    """Get the appropriate command to run Claude CLI, with Windows PowerShell fallback."""
+    if platform.system() == 'Windows':
+        # On Windows, try direct claude command first
+        try:
+            # Test if claude is directly available
+            result = subprocess.run(['claude', '--version'], 
+                                  stdout=subprocess.PIPE, 
+                                  stderr=subprocess.PIPE, 
+                                  timeout=5)
+            if result.returncode == 0:
+                return ['claude']
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            pass
+        
+        # If direct command fails, use PowerShell fallback
+        return ['powershell', '-Command', 'claude']
+    else:
+        # For non-Windows platforms, use direct command
+        return ['claude']
 
 def main():
     # Parse command line arguments
@@ -14,7 +36,7 @@ def main():
     master, slave = pty.openpty()
     
     # Start Claude process with the slave PTY as its controlling terminal
-    claude_args = ['claude']
+    claude_args = get_claude_command()
     if skip_permissions:
         claude_args.append('--dangerously-skip-permissions')
     
@@ -24,7 +46,7 @@ def main():
         stdout=slave,
         stderr=slave,
         close_fds=True,
-        preexec_fn=os.setsid
+        preexec_fn=os.setsid if platform.system() != 'Windows' else None
     )
     
     # Close the slave end in the parent process
