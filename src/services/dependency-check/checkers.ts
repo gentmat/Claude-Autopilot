@@ -8,6 +8,61 @@ import * as fs from 'fs';
 import { DependencyCheckResult, DependencyError } from './types';
 
 export async function checkClaudeInstallation(): Promise<DependencyCheckResult> {
+    // For Windows, try PowerShell first as a fallback method
+    if (process.platform === 'win32') {
+        return await checkClaudeInstallationWindows();
+    }
+    
+    // For non-Windows platforms, use the original method
+    return await checkClaudeInstallationGeneric();
+}
+
+async function checkClaudeInstallationWindows(): Promise<DependencyCheckResult> {
+    // First try the direct claude command
+    const directResult = await checkClaudeInstallationGeneric();
+    if (directResult.available) {
+        return directResult;
+    }
+    
+    // If direct command fails, try via PowerShell
+    try {
+        const { error, status, stdout, stderr } = spawnSync('powershell', ['-Command', 'claude --version'], {
+            stdio: 'pipe',
+            encoding: 'utf8',
+            timeout: 5000
+        });
+
+        if (error) {
+            return {
+                available: false,
+                error: `Failed to run claude command via PowerShell: ${error.message}. Direct command also failed: ${directResult.error}`,
+                installInstructions: getClaudeInstallInstructions()
+            };
+        }
+
+        if (status === 0 && stdout?.trim()) {
+            return {
+                available: true,
+                version: stdout.trim(),
+                path: 'claude (via PowerShell)'
+            };
+        } else {
+            return {
+                available: false,
+                error: `Claude CLI not found via PowerShell: ${stderr?.trim() || 'returned empty version'}. Direct command also failed: ${directResult.error}`,
+                installInstructions: getClaudeInstallInstructions()
+            };
+        }
+    } catch (error) {
+        return {
+            available: false,
+            error: `Failed to run claude command via PowerShell: ${error instanceof Error ? error.message : 'Unknown error'}. Direct command also failed: ${directResult.error}`,
+            installInstructions: getClaudeInstallInstructions()
+        };
+    }
+}
+
+async function checkClaudeInstallationGeneric(): Promise<DependencyCheckResult> {
     try {
         const { error, status, stdout, stderr } = spawnSync('claude', ['--version'], {
             stdio: 'pipe',
