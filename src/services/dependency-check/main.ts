@@ -207,10 +207,10 @@ async function handleNgrokUnavailable(): Promise<void> {
         
         // Show error message to user
         vscode.window.showErrorMessage(
-            `ngrok is required for external server but not available. External server has been disabled in ${scopeMessage} settings.`,
-            'Install ngrok'
+            `ngrok is required for external server but not available. External server has been disabled in ${scopeMessage} settings. Please install ngrok globally: 'npm install -g ngrok'`,
+            'Download ngrok'
         ).then(selection => {
-            if (selection === 'Install ngrok') {
+            if (selection === 'Download ngrok') {
                 vscode.env.openExternal(vscode.Uri.parse('https://ngrok.com/download'));
             }
         });
