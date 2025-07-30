@@ -149,7 +149,7 @@ export class MobileServer {
 
 let server: MobileServer | null = null;
 
-export function getMobileServer() {
+export function getMobileServer(): MobileServer {
     if (!server) {
         server = new MobileServer();
     }

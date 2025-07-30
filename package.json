@@ -169,7 +169,7 @@
         "claudeAutopilot.webInterface.useExternalServer": {
           "type": "boolean",
           "default": false,
-          "description": "Use external server (ngrok) for web interface. If disabled, uses local network only."
+          "description": "Use external server (ngrok) for web interface. If disabled, uses local network only. Requires global ngrok installation: 'npm install -g ngrok' and auth setup: 'ngrok config add-authtoken <token>'."
         },
         "claudeAutopilot.webInterface.password": {
           "type": "string",
@@ -187,7 +187,7 @@
   "scripts": {
     "vscode:prepublish": "DEBUG_MODE=false npm run compile && npm run copy-deps",
     "compile": "tsc -p ./ && cp src/claude_pty_wrapper.py out/claude/session/ && cp -r src/webview out/",
-    "copy-deps": "mkdir -p out/node_modules && cp -r node_modules/* out/node_modules/ 2>/dev/null || true",
+    "copy-deps": "rm -rf out/node_modules && cd out && npm init -y && npm install --production $(node -p \"Object.keys(require('../package.json').dependencies).join(' ')\")",
     "watch": "tsc -watch -p ./",
     "package": "DEBUG_MODE=false vsce package",
     "publish": "vsce publish",
@@ -238,7 +238,6 @@
   "dependencies": {
     "cookie-parser": "^1.4.7",
     "express": "^5.1.0",
-    "ngrok": "^5.0.0-beta.2",
     "qrcode": "^1.5.4",
     "uuid": "^11.1.0",
     "ws": "^8.18.3"

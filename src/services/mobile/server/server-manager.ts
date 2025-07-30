@@ -3,7 +3,7 @@ import cookieParser from 'cookie-parser';
 import * as http from 'http';
 import { AddressInfo } from 'net';
 import { NetworkInterfaceInfo } from 'os';
-import * as ngrok from 'ngrok';
+import { spawn, ChildProcess } from 'child_process';
 import * as QRCode from 'qrcode';
 import { debugLog } from '../../../utils/logging';
 import { AuthManager, AuthConfig } from '../auth/';
@@ -12,6 +12,7 @@ export class ServerManager {
     private app: express.Application;
     private server: http.Server | null = null;
     private ngrokUrl: string | null = null;
+    private ngrokProcess: ChildProcess | null = null;
     private isServerRunning = false;
     private authManager: AuthManager;
     private config: AuthConfig;
@@ -59,6 +60,68 @@ export class ServerManager {
         return this.app;
     }
 
+    private async startNgrokTunnel(port: number): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const ngrokArgs = ['http', port.toString(), '--region', 'us', '--log', 'stdout'];
+            
+            debugLog(`🚀 Starting ngrok with args: ${ngrokArgs.join(' ')}`);
+            
+            this.ngrokProcess = spawn('ngrok', ngrokArgs, {
+                stdio: ['ignore', 'pipe', 'pipe']
+            });
+
+            let output = '';
+            let urlFound = false;
+
+            this.ngrokProcess.stdout?.on('data', (data) => {
+                output += data.toString();
+                
+                // Look for the tunnel URL in the output
+                const urlMatch = output.match(/url=https?:\/\/[^\s]+/);
+                if (urlMatch && !urlFound) {
+                    urlFound = true;
+                    const url = urlMatch[0].replace('url=', '');
+                    debugLog(`✅ Ngrok tunnel established: ${url}`);
+                    resolve(url);
+                }
+            });
+
+            this.ngrokProcess.stderr?.on('data', (data) => {
+                const errorText = data.toString();
+                debugLog(`🔴 Ngrok stderr: ${errorText}`);
+                
+                // Check for common error patterns and provide helpful error messages
+                if (errorText.includes('authentication failed') && errorText.includes('simultaneous ngrok agent sessions')) {
+                    reject(new Error('Another ngrok session is already running. Please stop other ngrok processes or upgrade your ngrok account for multiple sessions.'));
+                } else if (errorText.includes('ERR_NGROK_108')) {
+                    reject(new Error('Ngrok session limit reached. Stop other ngrok processes or upgrade your account: https://dashboard.ngrok.com/agents'));
+                } else if (errorText.includes('authentication failed')) {
+                    reject(new Error('Ngrok authentication failed. Run: ngrok config add-authtoken <your-token>'));
+                }
+            });
+
+            this.ngrokProcess.on('error', (error) => {
+                debugLog(`❌ Ngrok process error: ${error.message}`);
+                reject(new Error(`Failed to start ngrok: ${error.message}`));
+            });
+
+            this.ngrokProcess.on('exit', (code) => {
+                if (code !== 0 && !urlFound) {
+                    debugLog(`❌ Ngrok exited with code: ${code}`);
+                    reject(new Error(`Ngrok process exited with code ${code}`));
+                }
+            });
+
+            // Timeout after 30 seconds
+            setTimeout(() => {
+                if (!urlFound) {
+                    this.ngrokProcess?.kill();
+                    reject(new Error('Ngrok tunnel setup timeout'));
+                }
+            }, 30000);
+        });
+    }
+
     public async start(): Promise<string> {
         if (this.isServerRunning) {
             throw new Error('Web server is already running');
@@ -77,12 +140,15 @@ export class ServerManager {
                     let publicUrl: string;
                     
                     if (this.config.useExternalServer) {
-                        this.ngrokUrl = await ngrok.connect({
-                            port,
-                            region: 'us'
-                        });
-                        publicUrl = this.ngrokUrl;
-                        debugLog(`🌍 External server (ngrok): ${this.ngrokUrl}`);
+                        try {
+                            const ngrokUrl = await this.startNgrokTunnel(port);
+                            this.ngrokUrl = ngrokUrl;
+                            publicUrl = this.ngrokUrl;
+                            debugLog(`🌍 External server (ngrok): ${this.ngrokUrl}`);
+                        } catch (error) {
+                            debugLog(`❌ Failed to start ngrok tunnel: ${error}`);
+                            throw error;
+                        }
                     } else {
                         const networkInterfaces = require('os').networkInterfaces();
                         let localIP = 'localhost';
@@ -130,12 +196,13 @@ export class ServerManager {
             this.server = null;
         }
 
-        if (this.ngrokUrl) {
+        if (this.ngrokProcess) {
             try {
-                await ngrok.disconnect();
-                await ngrok.kill();
+                debugLog('🔄 Stopping ngrok process...');
+                this.ngrokProcess.kill('SIGTERM');
+                this.ngrokProcess = null;
             } catch (error) {
-                // Ignore ngrok close errors
+                debugLog(`⚠️ Error stopping ngrok process: ${error}`);
             }
             this.ngrokUrl = null;
         }

@@ -964,9 +964,11 @@ export function deactivate() {
         
         // Stop web server
         const webServer = getMobileServer();
-        webServer.stop().catch(error => {
-            debugLog(`Error stopping web server during deactivation: ${error}`);
-        });
+        if (webServer) {
+            webServer.stop().catch(error => {
+                debugLog(`Error stopping web server during deactivation: ${error}`);
+            });
+        }
         
         debugLog(' Claude Autopilot Extension deactivated successfully');
     } catch (error) {
