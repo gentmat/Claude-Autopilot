@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { getWorkspaceRoot, resolveAndValidatePath, sanitizeGitOutput, isGitRepository, GitSecurityError } from './security';
 import { createErrorResult } from '../../utils/error-handler';
 import { GIT_TIMEOUT } from '../../core/constants/timeouts';
+import { wrapCommandForWSL } from '../../utils/wsl-helper';
 
 export interface GitOperationResult {
     success: boolean;
@@ -257,7 +258,8 @@ export async function unstageFiles(filePaths: string[]): Promise<GitOperationRes
 
 async function executeGitCommand(args: string[], cwd: string): Promise<string> {
     return new Promise((resolve, reject) => {
-        const process = spawn('git', args, {
+        const { command, args: wrappedArgs } = wrapCommandForWSL('git', args);
+        const process = spawn(command, wrappedArgs, {
             cwd,
             stdio: ['pipe', 'pipe', 'pipe']
         });

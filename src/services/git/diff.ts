@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { GitDiffResult, GitDiffLine, GitCompareMode } from './types';
 import { getWorkspaceRoot, resolveAndValidatePath, validateFileSize, sanitizeGitOutput, isGitRepository, GitSecurityError } from './security';
 import { GIT_TIMEOUT } from '../../core/constants/timeouts';
+import { wrapCommandForWSL } from '../../utils/wsl-helper';
 
 export async function getFileDiff(filePath: string, compareMode: GitCompareMode = 'working'): Promise<GitDiffResult> {
     const workspaceRoot = getWorkspaceRoot();
@@ -245,7 +246,8 @@ function parseDiffOutput(diffOutput: string, filePath: string): GitDiffResult {
 
 async function executeGitCommand(args: string[], cwd: string): Promise<string> {
     return new Promise((resolve, reject) => {
-        const process = spawn('git', args, {
+        const { command, args: wrappedArgs } = wrapCommandForWSL('git', args);
+        const process = spawn(command, wrappedArgs, {
             cwd,
             stdio: ['pipe', 'pipe', 'pipe']
         });

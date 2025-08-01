@@ -88,17 +88,44 @@ export async function startClaudeSession(skipPermissions: boolean = true): Promi
             throw new Error(errorMsg);
         }
     
-        const args = [wrapperPath];
-        if (skipPermissions) {
-            args.push('--skip-permissions');
-        }
+        // On Windows, we need to run the Python wrapper through WSL since PTY requires Unix-like system calls
+        let command: string;
+        let args: string[];
         
-        debugLog(`Using Python: ${pythonPath}`);
-        debugLog(`Using wrapper: ${wrapperPath}`);
+        if (process.platform === 'win32') {
+            // Convert Windows path to WSL path
+            // Handle both absolute and relative paths, and all drive letters
+            let wslWrapperPath = wrapperPath;
+            
+            // Convert drive letter (e.g., C: -> /mnt/c, D: -> /mnt/d)
+            wslWrapperPath = wslWrapperPath.replace(/^([A-Za-z]):/, (match, driveLetter) => {
+                return `/mnt/${driveLetter.toLowerCase()}`;
+            });
+            
+            // Convert backslashes to forward slashes
+            wslWrapperPath = wslWrapperPath.replace(/\\/g, '/');
+            
+            command = 'wsl';
+            args = ['python3', wslWrapperPath];
+            if (skipPermissions) {
+                args.push('--skip-permissions');
+            }
+            debugLog(`Original path: ${wrapperPath}`);
+            debugLog(`WSL path: ${wslWrapperPath}`);
+            debugLog(`Using WSL with Python3 and wrapper: ${wslWrapperPath}`);
+        } else {
+            command = pythonPath;
+            args = [wrapperPath];
+            if (skipPermissions) {
+                args.push('--skip-permissions');
+            }
+            debugLog(`Using Python: ${pythonPath}`);
+            debugLog(`Using wrapper: ${wrapperPath}`);
+        }
         
         let spawnedProcess;
         try {
-            spawnedProcess = spawn(pythonPath, args, {
+            spawnedProcess = spawn(command, args, {
                 cwd: cwd,
                 stdio: ['pipe', 'pipe', 'pipe'],
                 env: { 
@@ -174,7 +201,7 @@ export async function startClaudeSession(skipPermissions: boolean = true): Promi
         const hasPermissionPrompt = permissionPrompts.some(prompt => output.includes(prompt));
         
         if (hasPermissionPrompt && !sessionReady) {
-            debugLog('Ÿ” Permission prompt detected during startup - session ready for user interaction');
+            debugLog('ï¿½ï¿½ï¿½ Permission prompt detected during startup - session ready for user interaction');
             setSessionReady(true);
             startHealthCheck();
             startSleepPrevention();

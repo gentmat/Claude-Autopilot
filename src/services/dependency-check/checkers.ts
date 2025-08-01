@@ -6,6 +6,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 import { DependencyCheckResult, DependencyError } from './types';
+import { wrapCommandForWSL } from '../../utils/wsl-helper';
 
 export async function checkClaudeInstallation(): Promise<DependencyCheckResult> {
     // For Windows, try PowerShell first as a fallback method
@@ -18,15 +19,45 @@ export async function checkClaudeInstallation(): Promise<DependencyCheckResult> 
 }
 
 async function checkClaudeInstallationWindows(): Promise<DependencyCheckResult> {
-    // First try the direct claude command
-    const directResult = await checkClaudeInstallationGeneric();
-    if (directResult.available) {
-        return directResult;
+    // On Windows, we must use WSL because PTY functionality requires Unix-like system calls
+    // Check if WSL is available first
+    try {
+        const { error: wslError, status: wslStatus } = spawnSync('wsl', ['--status'], {
+            stdio: 'pipe',
+            encoding: 'utf8',
+            timeout: 3000
+        });
+
+        if (wslError || wslStatus !== 0) {
+            return {
+                available: false,
+                error: 'WSL is required for Claude Autopilot on Windows but is not available or not properly configured',
+                installInstructions: `WSL Installation Required:
+1. Install WSL: wsl --install
+2. Restart your computer
+3. Install Claude CLI inside WSL
+4. Verify: wsl claude --version
+
+WSL is required because the extension uses PTY functionality that requires Unix-like system calls.`
+            };
+        }
+    } catch (error) {
+        return {
+            available: false,
+            error: 'WSL is required for Claude Autopilot on Windows but is not available',
+            installInstructions: `WSL Installation Required:
+1. Install WSL: wsl --install
+2. Restart your computer
+3. Install Claude CLI inside WSL
+4. Verify: wsl claude --version
+
+WSL is required because the extension uses PTY functionality that requires Unix-like system calls.`
+        };
     }
     
-    // If direct command fails, try via PowerShell
+    // Now check if Claude is available in WSL
     try {
-        const { error, status, stdout, stderr } = spawnSync('powershell', ['-Command', 'claude --version'], {
+        const { error, status, stdout, stderr } = spawnSync('wsl', ['claude', '--version'], {
             stdio: 'pipe',
             encoding: 'utf8',
             timeout: 5000
@@ -35,7 +66,7 @@ async function checkClaudeInstallationWindows(): Promise<DependencyCheckResult> 
         if (error) {
             return {
                 available: false,
-                error: `Failed to run claude command via PowerShell: ${error.message}. Direct command also failed: ${directResult.error}`,
+                error: `WSL is available but Claude CLI is not installed in WSL: ${error.message}`,
                 installInstructions: getClaudeInstallInstructions()
             };
         }
@@ -44,19 +75,19 @@ async function checkClaudeInstallationWindows(): Promise<DependencyCheckResult> 
             return {
                 available: true,
                 version: stdout.trim(),
-                path: 'claude (via PowerShell)'
+                path: 'claude (via WSL)'
             };
         } else {
             return {
                 available: false,
-                error: `Claude CLI not found via PowerShell: ${stderr?.trim() || 'returned empty version'}. Direct command also failed: ${directResult.error}`,
+                error: `Claude CLI not found in WSL: ${stderr?.trim() || 'returned empty version'}`,
                 installInstructions: getClaudeInstallInstructions()
             };
         }
     } catch (error) {
         return {
             available: false,
-            error: `Failed to run claude command via PowerShell: ${error instanceof Error ? error.message : 'Unknown error'}. Direct command also failed: ${directResult.error}`,
+            error: `Failed to run claude command in WSL: ${error instanceof Error ? error.message : 'Unknown error'}`,
             installInstructions: getClaudeInstallInstructions()
         };
     }
@@ -102,10 +133,10 @@ async function checkClaudeInstallationGeneric(): Promise<DependencyCheckResult> 
 
 export async function checkPythonInstallation(): Promise<DependencyCheckResult> {
     // Try different Python commands in order of preference
-    // On Windows, try 'py' first as it's the Python launcher, then 'python'
+    // On Windows, try 'python3' first (via WSL), then 'python' (via WSL)
     // On other platforms, try 'python3' first, then 'python'
     const pythonCommands = process.platform === 'win32' 
-        ? ['python', 'py'] 
+        ? ['python3', 'python'] 
         : ['python3', 'python'];
     
     const triedCommands: string[] = [];
@@ -113,7 +144,8 @@ export async function checkPythonInstallation(): Promise<DependencyCheckResult> 
     for (const pythonCommand of pythonCommands) {
         triedCommands.push(pythonCommand);
         try {
-            const { error, status } = spawnSync(pythonCommand, ['--version'], { stdio: 'pipe' });
+            const { command, args } = wrapCommandForWSL(pythonCommand, ['--version']);
+            const { error, status } = spawnSync(command, args, { stdio: 'pipe' });
             
             if (error) {
                 // Command not found or failed to execute
@@ -131,7 +163,7 @@ export async function checkPythonInstallation(): Promise<DependencyCheckResult> 
                 return {
                     available: true,
                     version: versionCheck.version,
-                    path: pythonCommand
+                    path: process.platform === 'win32' ? `${pythonCommand} (via WSL)` : pythonCommand
                 };
             } else {
                 return {
@@ -153,7 +185,13 @@ export async function checkPythonInstallation(): Promise<DependencyCheckResult> 
 
 export async function checkPtyWrapperAvailability(): Promise<DependencyCheckResult> {
     try {
-        const wrapperPath = path.join(__dirname, '../../claude/session/claude_pty_wrapper.py');
+        // Import extensionContext from global state
+        const { extensionContext } = await import('../../core/state');
+
+        // Use extension context to get the correct path
+        const wrapperPath = extensionContext
+            ? path.join(extensionContext.extensionPath, 'out', 'claude', 'session', 'claude_pty_wrapper.py')
+            : path.join(__dirname, '../../claude/session/claude_pty_wrapper.py');
         
         // Check if the wrapper file exists
         if (!fs.existsSync(wrapperPath)) {
@@ -198,7 +236,8 @@ export async function checkNgrokInstallation(): Promise<DependencyCheckResult> {
 
 async function verifyPythonVersion(pythonCommand: string): Promise<{valid: boolean; version: string}> {
     try {
-        const { error, status, stdout, stderr } = spawnSync(pythonCommand, ['--version'], { 
+        const { command, args } = wrapCommandForWSL(pythonCommand, ['--version']);
+        const { error, status, stdout, stderr } = spawnSync(command, args, { 
             stdio: 'pipe',
             encoding: 'utf8'
         });
@@ -228,7 +267,8 @@ async function verifyPythonVersion(pythonCommand: string): Promise<{valid: boole
 
 async function checkCommand(command: string, args: string[]): Promise<DependencyCheckResult> {
     try {
-        const { error, status, stdout, stderr } = spawnSync(command, args, {
+        const { command: wrappedCommand, args: wrappedArgs } = wrapCommandForWSL(command, args);
+        const { error, status, stdout, stderr } = spawnSync(wrappedCommand, wrappedArgs, {
             stdio: 'pipe',
             encoding: 'utf8',
             timeout: 10000
@@ -248,7 +288,7 @@ async function checkCommand(command: string, args: string[]): Promise<Dependency
             return {
                 available: true,
                 version,
-                path: command
+                path: process.platform === 'win32' ? `${command} (via WSL)` : command
             };
         } else {
             return {
@@ -271,20 +311,32 @@ function getClaudeInstallInstructions(): string {
         case 'darwin': // macOS
             return `Claude CLI Installation (macOS):
 1. Install via Homebrew: brew install claude-cli
-2. Or download from: https://claude.ai/docs/cli
+2. Or download from: https://docs.anthropic.com/en/docs/claude-code/setup
 3. After installation, restart VS Code
 4. Verify installation: claude --version`;
             
         case 'win32': // Windows
-            return `Claude CLI Installation (Windows):
-1. Download from: https://claude.ai/docs/cli
-2. Add to system PATH
-3. Restart VS Code
-4. Verify installation: claude --version`;
+            return `Claude CLI Installation (Windows - WSL Required):
+IMPORTANT: WSL is required for Claude Autopilot on Windows because it uses PTY functionality that requires Unix-like system calls.
+
+1. Install WSL (if not already installed):
+   - Run: wsl --install
+   - Restart your computer
+
+2. Install Claude CLI inside WSL:
+   - Open WSL terminal (Ubuntu/your preferred distro)
+   - Install Claude CLI following Linux instructions
+   - Verify: claude --version (inside WSL)
+   - Run claude and set up your API key/Subscription token
+
+3. Verify from Windows:
+   - Test: wsl claude --version
+
+The extension will automatically use WSL to run Claude on Windows.`;
             
         case 'linux': // Linux
             return `Claude CLI Installation (Linux):
-1. Download from: https://claude.ai/docs/cli
+1. Download from: https://docs.anthropic.com/en/docs/claude-code/setup
 2. Make executable: chmod +x claude
 3. Move to PATH: sudo mv claude /usr/local/bin/
 4. Restart VS Code
@@ -292,7 +344,7 @@ function getClaudeInstallInstructions(): string {
             
         default:
             return `Claude CLI Installation:
-1. Visit: https://claude.ai/docs/cli
+1. Visit: https://docs.anthropic.com/en/docs/claude-code/setup
 2. Download for your platform
 3. Follow platform-specific installation instructions
 4. Restart VS Code
@@ -312,11 +364,23 @@ function getPythonInstallInstructions(): string {
 4. Verify installation: python3 --version`;
             
         case 'win32': // Windows  
-            return `Python Installation (Windows):
-1. Download from: https://python.org/downloads
-2. During installation, check "Add Python to PATH"
-3. Restart VS Code
-4. Verify installation: python --version or py --version`;
+            return `Python Installation (Windows - WSL Required):
+IMPORTANT: WSL is required for Claude Autopilot on Windows because it uses PTY functionality that requires Unix-like system calls.
+
+1. Install WSL (if not already installed):
+   - Run: wsl --install
+   - Restart your computer
+
+2. Install Python inside WSL:
+   - Open WSL terminal (Ubuntu/your preferred distro)
+   - Update package list: sudo apt update
+   - Install Python: sudo apt install python3 python3-pip
+   - Verify: python3 --version (inside WSL)
+
+3. Verify from Windows:
+   - Test: wsl python3 --version
+
+The extension will automatically use WSL to run Python on Windows.`;
             
         case 'linux': // Linux
             return `Python Installation (Linux):
@@ -349,14 +413,25 @@ function getNgrokInstallInstructions(): string {
 6. Verify installation: ngrok version`;
             
         case 'win32': // Windows
-            return `ngrok Installation (Windows):
-1. Download from: https://ngrok.com/download
-2. Extract to desired location
-3. Add to system PATH
-4. Create account at: https://dashboard.ngrok.com/signup
-5. Set auth token: ngrok authtoken <your-token>
-6. Restart VS Code
-7. Verify installation: ngrok version`;
+            return `ngrok Installation (Windows - WSL Required):
+IMPORTANT: WSL is required for Claude Autopilot on Windows because it uses PTY functionality that requires Unix-like system calls.
+
+1. Install WSL (if not already installed):
+   - Run: wsl --install
+   - Restart your computer
+
+2. Install ngrok inside WSL:
+   - Open WSL terminal (Ubuntu/your preferred distro)
+   - Download: curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null && echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list && sudo apt update && sudo apt install ngrok
+   - Or download manually from: https://ngrok.com/download
+   - Create account at: https://dashboard.ngrok.com/signup
+   - Set auth token: ngrok authtoken <your-token>
+   - Verify: ngrok version (inside WSL)
+
+3. Verify from Windows:
+   - Test: wsl ngrok version
+
+The extension will automatically use WSL to run ngrok on Windows.`;
             
         case 'linux': // Linux
             return `ngrok Installation (Linux):
