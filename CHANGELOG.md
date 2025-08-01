@@ -5,6 +5,18 @@ All notable changes to the Claude Autopilot extension will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2025-08-01
+
+### ✨ Added
+
+- **WSL Integration**: Comprehensive Windows Subsystem for Linux (WSL) integration for Win32 command execution
+- **Cross-Platform Command Detection**: Enhanced command detection with WSL fallback support for Windows users
+
+### 🔧 Improved
+
+- **Windows Compatibility**: Better Windows development environment support through WSL integration
+- **Command Execution**: More reliable command execution across different Windows configurations
+
 ## [0.1.3] - 2025-07-30
 
 ### 🔧 Fixed
