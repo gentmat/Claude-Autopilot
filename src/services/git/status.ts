@@ -2,6 +2,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { GitFileStatus, GitBranchInfo, GitStatusResult } from './types';
 import { getWorkspaceRoot, sanitizeGitOutput, isGitRepository, GitSecurityError } from './security';
 import { GIT_TIMEOUT } from '../../core/constants/timeouts';
+import { wrapCommandForWSL } from '../../utils/wsl-helper';
 
 export async function getGitStatus(): Promise<GitStatusResult> {
     const workspaceRoot = getWorkspaceRoot();
@@ -175,7 +176,8 @@ async function addDiffStats(files: GitFileStatus[], workspaceRoot: string): Prom
 
 async function executeGitCommand(args: string[], cwd: string): Promise<string> {
     return new Promise((resolve, reject) => {
-        const process = spawn('git', args, {
+        const { command, args: wrappedArgs } = wrapCommandForWSL('git', args);
+        const process = spawn(command, wrappedArgs, {
             cwd,
             stdio: ['pipe', 'pipe', 'pipe']
         });

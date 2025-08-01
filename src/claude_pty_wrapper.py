@@ -8,22 +8,11 @@ import fcntl
 import platform
 
 def get_claude_command():
-    """Get the appropriate command to run Claude CLI, with Windows PowerShell fallback."""
+    """Get the appropriate command to run Claude CLI. On Windows, always use WSL since PTY requires Unix environment."""
     if platform.system() == 'Windows':
-        # On Windows, try direct claude command first
-        try:
-            # Test if claude is directly available
-            result = subprocess.run(['claude', '--version'], 
-                                  stdout=subprocess.PIPE, 
-                                  stderr=subprocess.PIPE, 
-                                  timeout=5)
-            if result.returncode == 0:
-                return ['claude']
-        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-            pass
-        
-        # If direct command fails, use PowerShell fallback
-        return ['powershell', '-Command', 'claude']
+        # On Windows, we must use WSL because PTY functionality requires Unix-like system calls
+        # that are not available on Windows (pty, select, fcntl modules)
+        return ['wsl', 'claude']
     else:
         # For non-Windows platforms, use direct command
         return ['claude']

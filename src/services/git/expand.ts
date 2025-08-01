@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { GitDiffLine } from './types';
 import { getWorkspaceRoot, resolveAndValidatePath, sanitizeGitOutput, isGitRepository, GitSecurityError } from './security';
 import { GIT_TIMEOUT } from '../../core/constants/timeouts';
+import { wrapCommandForWSL } from '../../utils/wsl-helper';
 
 export async function expandContext(
     filePath: string, 
@@ -100,7 +101,8 @@ export async function expandContext(
 
 async function executeGitCommand(args: string[], cwd: string): Promise<string> {
     return new Promise((resolve, reject) => {
-        const process = spawn('git', args, {
+        const { command, args: wrappedArgs } = wrapCommandForWSL('git', args);
+        const process = spawn(command, wrappedArgs, {
             cwd,
             stdio: ['pipe', 'pipe', 'pipe']
         });

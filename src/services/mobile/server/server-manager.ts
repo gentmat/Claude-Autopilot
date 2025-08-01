@@ -7,6 +7,7 @@ import { spawn, ChildProcess } from 'child_process';
 import * as QRCode from 'qrcode';
 import { debugLog } from '../../../utils/logging';
 import { AuthManager, AuthConfig } from '../auth/';
+import { wrapCommandForWSL } from '../../../utils/wsl-helper';
 
 export class ServerManager {
     private app: express.Application;
@@ -66,7 +67,8 @@ export class ServerManager {
             
             debugLog(`🚀 Starting ngrok with args: ${ngrokArgs.join(' ')}`);
             
-            this.ngrokProcess = spawn('ngrok', ngrokArgs, {
+            const { command, args: wrappedArgs } = wrapCommandForWSL('ngrok', ngrokArgs);
+            this.ngrokProcess = spawn(command, wrappedArgs, {
                 stdio: ['ignore', 'pipe', 'pipe']
             });
 
