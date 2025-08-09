@@ -200,6 +200,9 @@ export async function startClaudeSession(skipPermissions: boolean = true): Promi
         
         const hasPermissionPrompt = permissionPrompts.some(prompt => output.includes(prompt));
         
+        // Detect the CLI ready prompt either by the textual hint or the ANSI-styled prompt line
+        const shortcutsPromptRegex = /\\u001b\[39m\\u001b\[22m\s>\s\\u001b\[7mT\\u001b\[27m/;
+
         if (hasPermissionPrompt && !sessionReady) {
             debugLog('��� Permission prompt detected during startup - session ready for user interaction');
             setSessionReady(true);
@@ -214,7 +217,7 @@ export async function startClaudeSession(skipPermissions: boolean = true): Promi
             }, 500);
             
             vscode.window.showInformationMessage('Claude is asking for permission. Use the Claude output area to navigate and select your choice.');
-        } else if (output.includes('? for shortcuts') && !sessionReady) {
+        } else if ((output.includes('? for shortcuts') || shortcutsPromptRegex.test(JSON.stringify(output))) && !sessionReady) {
             debugLog('✅ Claude ready prompt detected during startup');
             setSessionReady(true);
             startHealthCheck();
