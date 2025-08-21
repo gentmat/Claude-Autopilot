@@ -9,10 +9,21 @@ import { generateMessageId } from '../../utils/id-generator';
 export function isCurrentUsageLimit(output: string): boolean {
     try {
         const usageLimitPattern = /(Claude\s+)?usage\s+limit\s+reached.*?reset\s+at\s+(\d{1,2}[:\d]*(?:\s*[APM]{2})?(?:\s*\([^)]+\))?)/gi;
+        const hourLimitPattern = /(\d+)-hour\s+limit\s+reached\s*[∙•·]\s*resets\s+(\d{1,2}[:\d]*(?:\s*[APM]{2})?(?:\s*\([^)]+\))?)/gi;
         const matches = [];
         let match;
         
+        // Check for traditional "usage limit reached... reset at" pattern
         while ((match = usageLimitPattern.exec(output)) !== null) {
+            matches.push({
+                fullMatch: match[0],
+                resetTime: match[2],
+                index: match.index
+            });
+        }
+        
+        // Check for new "X-hour limit reached ∙ resets TIME" pattern
+        while ((match = hourLimitPattern.exec(output)) !== null) {
             matches.push({
                 fullMatch: match[0],
                 resetTime: match[2],
@@ -146,7 +157,14 @@ function calculateWaitTime(resetTime: string): number {
 }
 
 export function handleUsageLimit(output: string, message: MessageItem): void {
-    const resetTimeMatch = output.match(/reset at (\d{1,2}[:\d]*(?:\s*[APM]{2})?(?:\s*\([^)]+\))?)/i);
+    // Try traditional "reset at" pattern first
+    let resetTimeMatch = output.match(/reset at (\d{1,2}[:\d]*(?:\s*[APM]{2})?(?:\s*\([^)]+\))?)/i);
+    
+    // If not found, try new "resets TIME" pattern  
+    if (!resetTimeMatch) {
+        resetTimeMatch = output.match(/resets\s+(\d{1,2}[:\d]*(?:\s*[APM]{2})?(?:\s*\([^)]+\))?)/i);
+    }
+    
     const resetTime = resetTimeMatch ? resetTimeMatch[1] : 'unknown time';
     
     setProcessingQueue(false);
