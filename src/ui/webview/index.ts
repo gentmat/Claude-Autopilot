@@ -1,16 +1,21 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { claudePanel, messageQueue, debugMode, sessionReady, processingQueue } from '../../core/state';
+import { claudePanel, messageQueue, chatHistory, debugMode, sessionReady, processingQueue } from '../../core/state';
 import { debugLog } from '../../utils/logging';
 import { getValidatedConfig } from '../../core/config';
 
 export function updateWebviewContent(): void {
     if (claudePanel) {
         try {
+            // Send both legacy queue and new chat history
             claudePanel.webview.postMessage({
                 command: 'updateQueue',
                 queue: messageQueue
+            });
+            claudePanel.webview.postMessage({
+                command: 'updateChatHistory',
+                chatHistory: chatHistory
             });
         } catch (error) {
             debugLog(`❌ Failed to update webview content: ${error}`);

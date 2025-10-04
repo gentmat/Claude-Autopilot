@@ -6,7 +6,8 @@ import {
     isRunning, 
     claudeOutputBuffer, 
     processingQueue,
-    sessionReady
+    sessionReady,
+    chatHistory
 } from '../../../core/state';
 import { FileUtils } from '../utils';
 
@@ -104,6 +105,13 @@ export class WebSocketManager {
             type: 'outputUpdate', 
             output: claudeOutputBuffer,
             timestamp: Date.now()
+        });
+    }
+
+    public notifyChatUpdate(): void {
+        this.broadcastToClients({ 
+            type: 'chatHistoryUpdate', 
+            chatHistory: chatHistory
         });
     }
 

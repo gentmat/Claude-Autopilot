@@ -1,10 +1,11 @@
 import * as vscode from 'vscode';
 import { ChildProcess } from 'child_process';
-import { MessageItem, HistoryRun } from '../../core/types';
+import { MessageItem, HistoryRun, ChatMessage } from '../../core/types';
 
 export let claudePanel: vscode.WebviewPanel | null = null;
 export let isRunning = false;
 export let messageQueue: MessageItem[] = [];
+export let chatHistory: ChatMessage[] = []; // New real-time chat history
 export let claudeProcess: ChildProcess | null = null;
 export let resumeTimer: NodeJS.Timeout | null = null;
 export let countdownInterval: NodeJS.Timeout | null = null;
@@ -37,6 +38,12 @@ export function setIsRunning(running: boolean) {
 
 export function setMessageQueue(queue: MessageItem[]) {
     messageQueue = queue;
+    notifyMobileQueueUpdate();
+}
+
+export function setChatHistory(history: ChatMessage[]) {
+    chatHistory.length = 0;
+    chatHistory.push(...history);
     notifyMobileQueueUpdate();
 }
 

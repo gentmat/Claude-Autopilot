@@ -14,47 +14,50 @@
     <div class="container">
         <div class="header">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h1>Claude Autopilot</h1>
+                <h1>Claude Autopilot - Real-time Chat</h1>
                 <button id="settingsBtn" onclick="openSettings()" class="btn-secondary" title="Open Settings">
                     <span class="btn-icon">⚙️</span>Settings
                 </button>
             </div>
-            <p>Queue messages for automated Claude CLI processing with intelligent session management</p>
+            <p>Send messages to Claude in real-time - no queue, just instant communication</p>
         </div>
 
-        <div class="input-section">
-            <h3>Add Message to Queue</h3>
-            <textarea id="messageInput" placeholder="Enter your message for Claude..."></textarea>
-            <div class="controls"
-                style="justify-content: flex-end; margin-top: 5px; border-bottom: 1px solid var(--vscode-panel-border); padding-bottom: 20px;">
-                <small style="color: var(--vscode-descriptionForeground); margin-left: 12px; opacity: 0.8;">
-                    Press Cmd+Enter (Mac) or Ctrl+Enter to add message
-                </small>
-                <button onclick="addMessage()" class="btn-primary">
-                    <span class="btn-icon">➕</span>Add Message
+        <!-- Real-time Chat Section -->
+        <div class="chat-section">
+            <div class="chat-header">
+                <h3>Chat with Claude</h3>
+                <button onclick="clearChatHistory()" class="btn-secondary btn-small">
+                    <span class="btn-icon">🗑️</span>Clear Chat
                 </button>
+            </div>
+            <div id="chatContainer" class="chat-container">
+                <div class="chat-welcome">
+                    <div class="pulse-dot"></div>
+                    <span>Ready to chat with Claude...</span>
+                </div>
             </div>
         </div>
 
-        <div class="controls">
-            <button id="startBtn" onclick="startProcessing()" class="btn-success" disabled>
-                <span class="btn-icon">▶️</span>Start Processing
-            </button>
-            <button id="stopBtn" onclick="stopProcessing()" class="btn-danger" disabled>
-                <span class="btn-icon">⏹️</span>Stop Processing
-            </button>
-            <button id="interruptBtn" onclick="interruptClaude()" class="btn-warning">
-                <span class="btn-icon">⚠️</span>Interrupt (ESC)
-            </button>
-            <button id="resetBtn" onclick="resetSession()" class="btn-warning">
-                <span class="btn-icon">🔄</span>Reset Session
-            </button>
-            <div class="toggle-container" style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
-                <label class="toggle-switch">
-                    <input type="checkbox" id="skipPermissions" checked>
-                    <span class="toggle-slider"></span>
-                </label>
-                <span style="color: var(--vscode-foreground); font-size: 14px;">Skip permissions check</span>
+        <!-- Message Input Section -->
+        <div class="input-section">
+            <h3>Send Message</h3>
+            <textarea id="messageInput" placeholder="Type your message to Claude..."></textarea>
+            <div class="controls"
+                style="justify-content: space-between; margin-top: 5px; border-bottom: 1px solid var(--vscode-panel-border); padding-bottom: 20px;">
+                <small style="color: var(--vscode-descriptionForeground); margin-left: 12px; opacity: 0.8;">
+                    Press Cmd+Enter (Mac) or Ctrl+Enter to send message
+                </small>
+                <div style="display: flex; gap: 10px;">
+                    <button id="interruptBtn" onclick="interruptClaude()" class="btn-warning">
+                        <span class="btn-icon">⚠️</span>Interrupt (ESC)
+                    </button>
+                    <button id="resetBtn" onclick="resetSession()" class="btn-warning">
+                        <span class="btn-icon">🔄</span>Reset Session
+                    </button>
+                    <button onclick="sendChatMessage()" class="btn-primary">
+                        <span class="btn-icon">📤</span>Send Message
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -118,9 +121,10 @@
             </div>
         </div>
 
-        <div class="queue-section">
+        <!-- Legacy queue section - hidden by default -->
+        <div class="queue-section" style="display: none;">
             <div class="queue-header">
-                <h3>Message Queue</h3>
+                <h3>Message Queue (Legacy)</h3>
                 <div class="queue-controls">
                     <button id="clearBtn" onclick="clearQueue()" class="btn-secondary btn-small">
                         <span class="btn-icon">🗑️</span>Clear Queue
@@ -134,9 +138,10 @@
             </div>
         </div>
 
-        <div class="history-section">
+        <!-- Legacy history section - hidden by default -->
+        <div class="history-section" style="display: none;">
             <div class="history-header">
-                <h3>History</h3>
+                <h3>History (Legacy)</h3>
                 <div class="history-controls">
                     <select id="historyFilter" onchange="filterHistory()">
                         <option value="all">All Runs</option>

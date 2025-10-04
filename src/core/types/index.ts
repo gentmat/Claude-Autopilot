@@ -1,3 +1,12 @@
+// Simplified chat message for real-time communication
+export interface ChatMessage {
+    id: string;
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    timestamp: string;
+}
+
+// Legacy types kept for backward compatibility during migration
 export interface MessageItem {
     id: string;
     text: string;

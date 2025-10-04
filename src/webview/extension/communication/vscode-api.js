@@ -13,6 +13,9 @@ export function sendMessageToVSCode(command, data = {}) {
   }
 }
 
+// Alias for easier use
+export const sendMessage = sendMessageToVSCode;
+
 // Specific VS Code API calls
 export function sendAddMessage(text) {
   sendMessageToVSCode('addMessage', { text });

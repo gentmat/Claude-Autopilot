@@ -1,7 +1,9 @@
-import { claudePanel, claudeOutputBuffer, claudeCurrentScreen, claudeOutputTimer, claudeAutoClearTimer, lastClaudeOutputTime, setClaudeOutputBuffer, setClaudeCurrentScreen, setClaudeOutputTimer, setClaudeAutoClearTimer, setLastClaudeOutputTime } from '../../core/state';
+import { claudePanel, claudeOutputBuffer, claudeCurrentScreen, claudeOutputTimer, claudeAutoClearTimer, lastClaudeOutputTime, setClaudeOutputBuffer, setClaudeCurrentScreen, setClaudeOutputTimer, setClaudeAutoClearTimer, setLastClaudeOutputTime, chatHistory } from '../../core/state';
 import { CLAUDE_OUTPUT_THROTTLE_MS, CLAUDE_OUTPUT_AUTO_CLEAR_MS, CLAUDE_OUTPUT_MAX_BUFFER_SIZE, ANSI_CLEAR_SCREEN_PATTERNS } from '../../core/constants';
 import { debugLog, formatTerminalOutput, sendToWebviewTerminal } from '../../utils/logging';
 import { getMobileServer } from '../../services/mobile/index';
+import { updateWebviewContent } from '../../ui/webview';
+import { generateMessageId } from '../../utils/id-generator';
 
 // Debouncing for repeated debug messages
 let lastClearScreenLogTime = 0;
@@ -99,6 +101,9 @@ export function flushClaudeOutput(): void {
     const formattedOutput = formatTerminalOutput(output, 'claude');
     sendToWebviewTerminal(formattedOutput);
     
+    // Attempt to derive assistant reply for chat UI when ready prompt is visible
+    tryAppendAssistantFromScreen(output);
+    
     // Notify mobile clients if mobile server is running
     try {
         const mobileServer = getMobileServer();
@@ -118,10 +123,68 @@ export function clearClaudeOutput(): void {
     
     if (claudeOutputTimer) {
         clearTimeout(claudeOutputTimer);
-        setClaudeOutputTimer(null);
     }
     if (claudeAutoClearTimer) {
         clearTimeout(claudeAutoClearTimer);
         setClaudeAutoClearTimer(null);
     }
+}
+
+// --- Chat assistant extraction from current screen ---
+let lastAssistantSnapshot = '';
+
+function tryAppendAssistantFromScreen(screen: string): void {
+    // Only append when the last chat entry is a user message awaiting a reply
+    const last = chatHistory[chatHistory.length - 1];
+    if (!last || last.role !== 'user') return;
+
+    // Detect ready prompt indicating completion/stability
+    const readyPatterns: (RegExp | string)[] = [
+        /\? for shortcuts/,
+        /\u001b\[2m\u001b\[38;5;244m│\u001b\[39m\u001b\[22m\s>/,
+        />\s*$/,
+    ];
+    const isReady = readyPatterns.some(p =>
+        typeof p === 'string' ? screen.includes(p as string) : (p as RegExp).test(screen) || (p as RegExp).test(JSON.stringify(screen))
+    );
+    if (!isReady) return;
+
+    // Use current screen as single source, trim to content after last clear-screen
+    let content = claudeCurrentScreen;
+    let lastIdx = -1;
+    for (const pat of ANSI_CLEAR_SCREEN_PATTERNS) {
+        const idx = content.lastIndexOf(pat);
+        if (idx > lastIdx) lastIdx = idx;
+    }
+    if (lastIdx >= 0) {
+        content = content.substring(lastIdx);
+    }
+
+    const plain = stripAnsi(content).trim();
+    if (!plain) return;
+
+    // Deduplicate if screen hasn't changed materially
+    if (plain === lastAssistantSnapshot) return;
+
+    // Filter out pure prompt-only output
+    const promptOnly = /^(?:\? for shortcuts|>\s*)$/m.test(plain) || plain.replace(/[\s\n]+/g, '') === '>';
+    if (promptOnly) return;
+
+    // Append as assistant message
+    chatHistory.push({
+        id: generateMessageId(),
+        role: 'assistant',
+        content: plain,
+        timestamp: new Date().toISOString()
+    });
+    lastAssistantSnapshot = plain;
+    updateWebviewContent();
+}
+
+function stripAnsi(text: string): string {
+    return text
+        .replace(/\x1B\[[0-9;]*[A-Za-z]/g, '')
+        .replace(/\u001b\[[0-9;]*[A-Za-z]/g, '')
+        .replace(/\r/g, '')
+        .trim();
 }

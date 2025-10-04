@@ -23,6 +23,7 @@ import {
     processingQueue,
     sessionReady,
     currentMessage,
+    chatHistory,
     setProcessingQueue,
     setIsRunning
 } from '../../../core/state';
@@ -179,6 +180,27 @@ export class APIRoutes {
                 console.error('Error interrupting Claude:', error);
                 res.status(500).json({ error: 'Failed to interrupt Claude' });
             }
+        });
+
+        // Real-time Chat API
+        app.post('/api/chat/send', async (req: Request, res: Response) => {
+            const { message } = req.body;
+            if (!message || typeof message !== 'string') {
+                return res.status(400).json({ error: 'Message is required' });
+            }
+            
+            try {
+                const { sendChatMessage } = require('../../../claude/chat');
+                await sendChatMessage(message);
+                this.notifyCallback?.(MESSAGE_TYPES.CHAT_UPDATE);
+                res.json({ success: true });
+            } catch (error) {
+                res.status(500).json({ error: getErrorMessage(error) });
+            }
+        });
+
+        app.get('/api/chat/history', (req: Request, res: Response) => {
+            res.json(chatHistory);
         });
 
         // Output API

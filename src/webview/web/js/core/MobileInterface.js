@@ -98,34 +98,31 @@ export class MobileInterface {
         document.getElementById('interrupt-btn').addEventListener('click', () => this.handleControlAction('interrupt'));
         document.getElementById('reset-btn').addEventListener('click', () => this.handleControlAction('reset'));
 
-        // Add message
-        document.getElementById('add-message-btn').addEventListener('click', () => this.showAddMessageModal());
-        document.getElementById('confirm-add-message').addEventListener('click', () => this.addMessage());
-        document.getElementById('cancel-add-message').addEventListener('click', () => this.hideAddMessageModal());
-        document.getElementById('close-add-modal').addEventListener('click', () => this.hideAddMessageModal());
-
-        // Edit message
-        document.getElementById('confirm-edit-message').addEventListener('click', () => this.saveEditMessage());
-        document.getElementById('cancel-edit-message').addEventListener('click', () => this.hideEditMessageModal());
-        document.getElementById('close-edit-modal').addEventListener('click', () => this.hideEditMessageModal());
+        // Real-time chat
+        const sendBtn = document.getElementById('send-message-btn');
+        if (sendBtn) {
+            sendBtn.addEventListener('click', () => this.sendChatMessage());
+        }
+        
+        const chatInput = document.getElementById('chat-input');
+        if (chatInput) {
+            chatInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    this.sendChatMessage();
+                }
+            });
+        }
 
         // Output controls
         document.getElementById('clear-output-btn').addEventListener('click', () => this.clearOutput());
         document.getElementById('scroll-lock-btn').addEventListener('click', () => this.toggleScrollLock());
 
         // Section toggles
-        document.getElementById('queue-toggle').addEventListener('click', () => this.toggleSection('queue'));
+        document.getElementById('chat-toggle').addEventListener('click', () => this.toggleSection('chat'));
         document.getElementById('explorer-toggle').addEventListener('click', () => this.toggleSection('explorer'));
         document.getElementById('output-toggle').addEventListener('click', () => this.toggleSection('output'));
         document.getElementById('git-toggle').addEventListener('click', () => this.toggleSection('git'));
-
-        // Modal backdrop clicks
-        document.getElementById('add-message-modal').addEventListener('click', (e) => {
-            if (e.target === e.currentTarget) this.hideAddMessageModal();
-        });
-        document.getElementById('edit-message-modal').addEventListener('click', (e) => {
-            if (e.target === e.currentTarget) this.hideEditMessageModal();
-        });
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => this.handleKeydown(e));
@@ -221,6 +218,9 @@ export class MobileInterface {
             break;
         case 'queueUpdate':
             this.updateQueue(data.queue);
+            break;
+        case 'chatHistoryUpdate':
+            this.updateChatHistory(data.chatHistory || []);
             break;
         case 'statusUpdate':
             this.updateStatus(data.status);
@@ -408,6 +408,107 @@ export class MobileInterface {
         } finally {
             this.hideLoading();
         }
+    }
+
+    async sendChatMessage() {
+        const input = document.getElementById('chat-input');
+        const message = input.value.trim();
+        
+        if (!message) {
+            this.showToast('Please enter a message', TOAST_TYPE.WARNING);
+            return;
+        }
+        
+        // Add user message to chat UI immediately
+        this.addChatMessageToUI('user', message);
+        
+        // Clear input
+        input.value = '';
+        
+        this.showLoading();
+        
+        try {
+            const response = await fetch('/api/chat/send', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${this.authToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ message })
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to send message');
+            }
+            
+            this.showToast('Message sent to Claude', TOAST_TYPE.SUCCESS);
+        } catch (error) { // eslint-disable-line no-unused-vars
+            this.showToast('Failed to send message', TOAST_TYPE.ERROR);
+            this.addChatMessageToUI('system', 'Error: Failed to send message');
+        } finally {
+            this.hideLoading();
+        }
+    }
+
+    addChatMessageToUI(role, content) {
+        const chatMessages = document.getElementById('chat-messages');
+        
+        // Remove welcome message if exists
+        const welcome = chatMessages.querySelector('.chat-welcome');
+        if (welcome) {
+            welcome.remove();
+        }
+        
+        const messageEl = document.createElement('div');
+        messageEl.className = `chat-message chat-message--${role}`;
+        
+        const roleIcon = role === 'user' ? '👤' : role === 'assistant' ? '🤖' : 'ℹ️';
+        const roleName = role.charAt(0).toUpperCase() + role.slice(1);
+        const timestamp = formatTime(new Date());
+        
+        messageEl.innerHTML = `
+            <div class="message-header">
+                <span class="message-role">
+                    <span class="role-icon">${roleIcon}</span>
+                    ${roleName}
+                </span>
+                <span class="message-time">${timestamp}</span>
+            </div>
+            <div class="message-content">${escapeHtml(content)}</div>
+        `;
+        
+        chatMessages.appendChild(messageEl);
+        
+        // Auto-scroll to bottom
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    updateChatHistory(chatHistory) {
+        const chatMessages = document.getElementById('chat-messages');
+        const messageCounter = document.getElementById('message-counter');
+        
+        // Update counter
+        if (messageCounter) {
+            messageCounter.textContent = chatHistory.length;
+            messageCounter.setAttribute('data-count', chatHistory.length);
+        }
+        
+        // Clear and rebuild chat
+        chatMessages.innerHTML = '';
+        
+        if (chatHistory.length === 0) {
+            chatMessages.innerHTML = `
+                <div class="chat-welcome">
+                    <div class="pulse-dot"></div>
+                    <span>Ready to chat with Claude in real-time...</span>
+                </div>
+            `;
+            return;
+        }
+        
+        chatHistory.forEach(message => {
+            this.addChatMessageToUI(message.role, message.content);
+        });
     }
 
     showAddMessageModal() {

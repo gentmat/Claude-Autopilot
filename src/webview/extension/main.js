@@ -1,6 +1,7 @@
 // Main entry point - initializes all modules and sets up event handlers
 import { addMessage } from './ui/session-controls.js';
 import { updateButtonStates } from './ui/queue-manager.js';
+import { sendChatMessage, clearChatHistory } from './ui/chat-manager.js';
 import { loadHistory } from './features/history-manager.js';
 import { requestDevelopmentModeSetting } from './features/development-tools.js';
 import { sendGetSkipPermissionsSetting, sendUpdateSkipPermissionsSetting, sendGetHistoryVisibilitySetting } from './communication/vscode-api.js';
@@ -63,7 +64,7 @@ function setupKeyboardHandlers() {
     }
       
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-      addMessage();
+      sendChatMessage(); // Send message in real-time
     }
   });
 }

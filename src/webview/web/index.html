@@ -70,26 +70,32 @@
                 </button>
             </section>
 
-            <!-- Queue Section -->
-            <section class="queue-section">
+            <!-- Real-time Chat Section -->
+            <section class="chat-section">
                 <header class="section-header">
                     <h2 class="section-title">
-                        Message Queue
-                        <span class="queue-counter" id="queue-counter" data-count="0">0</span>
+                        Chat with Claude
+                        <span class="message-counter" id="message-counter" data-count="0">0</span>
                     </h2>
-                    <button class="section-toggle" id="queue-toggle" data-expanded="true">
+                    <button class="section-toggle" id="chat-toggle" data-expanded="true">
                         <span class="toggle-icon">▼</span>
                     </button>
                 </header>
 
-                <div class="section-content" id="queue-content">
-                    <button class="add-message-btn" id="add-message-btn">
-                        <span class="btn-icon">➕</span>
-                        Add Message
-                    </button>
-
-                    <div class="queue-container" id="queue-container">
-                        <!-- Queue items will be populated by JavaScript -->
+                <div class="section-content" id="chat-content">
+                    <div class="chat-messages" id="chat-messages">
+                        <div class="chat-welcome">
+                            <div class="pulse-dot"></div>
+                            <span>Ready to chat with Claude in real-time...</span>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-input-container">
+                        <textarea id="chat-input" placeholder="Type your message..." rows="3"></textarea>
+                        <button class="send-message-btn" id="send-message-btn">
+                            <span class="btn-icon">📤</span>
+                            Send
+                        </button>
                     </div>
                 </div>
             </section>
@@ -237,39 +243,7 @@
         </footer>
     </div>
 
-    <!-- Add Message Modal -->
-    <div class="modal" id="add-message-modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Add Message</h3>
-                <button class="modal-close" id="close-add-modal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <textarea id="message-input" placeholder="Enter your message for Claude..." rows="4"></textarea>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn--secondary" id="cancel-add-message">Cancel</button>
-                <button class="btn btn--primary" id="confirm-add-message">Add Message</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Edit Message Modal -->
-    <div class="modal" id="edit-message-modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Edit Message</h3>
-                <button class="modal-close" id="close-edit-modal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <textarea id="edit-message-input" placeholder="Edit your message..." rows="4"></textarea>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn--secondary" id="cancel-edit-message">Cancel</button>
-                <button class="btn btn--primary" id="confirm-edit-message">Save Changes</button>
-            </div>
-        </div>
-    </div>
+    <!-- Legacy modals removed - using inline chat input now -->
 
     <!-- File Preview Modal -->
     <div class="modal file-preview-modal modal-fullscreen" id="file-preview-modal">

@@ -72,6 +72,9 @@ export class MobileServer {
                 case MESSAGE_TYPES.QUEUE_UPDATE:
                     this.webSocketManager.notifyQueueUpdate();
                     break;
+                case MESSAGE_TYPES.CHAT_UPDATE:
+                    this.webSocketManager.notifyChatUpdate();
+                    break;
                 case MESSAGE_TYPES.STATUS_UPDATE:
                     this.webSocketManager.notifyStatusUpdate();
                     break;

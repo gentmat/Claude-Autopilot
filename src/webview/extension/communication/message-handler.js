@@ -7,6 +7,7 @@ import { updateHistoryFromMessage } from '../features/history-manager.js';
 import { renderFileAutocomplete } from '../features/file-autocomplete.js';
 import { updateDevelopmentModeUI } from '../features/development-tools.js';
 import { updateWebServerStatusFromMessage } from '../features/web-interface.js';
+import { handleChatHistoryUpdate } from '../ui/chat-manager.js';
 
 // Handle messages from extension
 export function setupMessageHandler() {
@@ -15,6 +16,9 @@ export function setupMessageHandler() {
     switch (message.command) {
     case 'updateQueue':
       updateQueue(message.queue);
+      break;
+    case 'updateChatHistory':
+      handleChatHistoryUpdate(message.chatHistory);
       break;
     case 'terminalOutput':
       appendToTerminal(message.output);

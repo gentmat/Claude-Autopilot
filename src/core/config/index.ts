@@ -56,7 +56,7 @@ export const DEFAULT_CONFIG: ClaudeAutopilotConfig = {
     },
     
     session: {
-        autoStart: false,
+        autoStart: true,
         skipPermissions: true,
         scheduledStartTime: ''
     },

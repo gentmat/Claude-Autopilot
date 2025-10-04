@@ -6,6 +6,7 @@ import {
 } from './core';
 import { updateWebviewContent, updateSessionState, getWebviewContent, sendHistoryVisibilitySettings } from './ui';
 import { startClaudeSession, resetClaudeSession, handleClaudeKeypress, startProcessingQueue, stopProcessingQueue, flushClaudeOutput, clearClaudeOutput } from './claude';
+import { sendChatMessage, clearChatHistory } from './claude/chat';
 import {
     removeMessageFromQueue, duplicateMessageInQueue, editMessageInQueue, reorderQueue, clearMessageQueue,
     addMessageToQueueFromWebview, loadWorkspaceHistory, filterHistory, 
@@ -143,8 +144,20 @@ export function activate(context: vscode.ExtensionContext) {
                     debugLog(`📨 Webview message: ${message.command}`);
                     
                     switch (message.command) {
+                        case 'sendChatMessage':
+                            // Real-time chat message - send immediately
+                            try {
+                                await sendChatMessage(message.text);
+                            } catch (error) {
+                                showErrorFromException(error, 'Failed to send chat message');
+                                debugLog(`Error sending chat message: ${error}`);
+                            }
+                            break;
                         case 'addMessage':
                             addMessageToQueueFromWebview(message.text);
+                            break;
+                        case 'clearChatHistory':
+                            clearChatHistory();
                             break;
                         case 'startProcessing':
                             try {
