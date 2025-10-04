@@ -55,6 +55,20 @@ function initialize() {
   setupSkipPermissionsHandler();
 }
 
+function setupAccordions() {
+  // Generic accordion toggling using data-target attribute
+  document.querySelectorAll('.accordion .accordion-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const targetSelector = header.getAttribute('data-target');
+      if (!targetSelector) return;
+      const content = document.querySelector(targetSelector);
+      if (!content) return;
+      const isHidden = content.style.display === 'none' || getComputedStyle(content).display === 'none';
+      content.style.display = isHidden ? 'block' : 'none';
+    });
+  });
+}
+
 function setupKeyboardHandlers() {
   // Handle Enter key in textarea
   document.getElementById('messageInput').addEventListener('keydown', function (event) {
@@ -62,8 +76,14 @@ function setupKeyboardHandlers() {
     if (handleAutocompleteNavigation(event)) {
       return;
     }
-      
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+
+    if (event.key === 'Enter') {
+      if (event.shiftKey) {
+        // Allow newline insertion
+        return; 
+      }
+      // Prevent default newline and send message
+      event.preventDefault();
       sendChatMessage(); // Send message in real-time
     }
   });
@@ -184,7 +204,10 @@ function setupSkipPermissionsHandler() {
 
 
 // Initialize when DOM is ready
-document.addEventListener('DOMContentLoaded', initialize);
+document.addEventListener('DOMContentLoaded', () => {
+  initialize();
+  setupAccordions();
+});
 
 // Import all modules needed for global access
 import { startProcessing, stopProcessing, interruptClaude, resetSession, openSettings } from './ui/session-controls.js';
