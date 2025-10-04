@@ -12,13 +12,6 @@
 
 <body>
     <div class="container">
-        <div class="header">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h1>Claude Autopilot</h1>
-            </div>
-            <p>Real-time interaction with Claude</p>
-        </div>
-
         <!-- Claude Live Output at Top -->
         <div class="claude-output-section">
             <div class="claude-header">
@@ -57,6 +50,9 @@
                     </button>
                     <button onclick="sendChatMessage()" class="btn-primary">
                         <span class="btn-icon">📤</span>Send Message
+                    </button>
+                    <button onclick="testKeyboardHandler()" class="btn-secondary" style="background: #666;" title="Debug: Test keyboard handler">
+                        <span class="btn-icon">🔧</span>Test
                     </button>
                 </div>
             </div>
