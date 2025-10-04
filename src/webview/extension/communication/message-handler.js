@@ -28,10 +28,6 @@ export function setupMessageHandler() {
       break;
     case 'setSecuritySettings':
       setAllowDangerousXssbypass(message.allowDangerousXssbypass);
-      const securityWarning = document.getElementById('securityWarning');
-      if (securityWarning) {
-        securityWarning.style.display = message.allowDangerousXssbypass ? 'block' : 'none';
-      }
       break;
     case 'setHistoryVisibility':
       const historySection = document.querySelector('.history-section');
