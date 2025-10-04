@@ -388,7 +388,6 @@ function setupSkipPermissionsHandler() {
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
   initialize();
-  setupAccordions();
 });
 
 // Import all modules needed for global access

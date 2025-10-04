@@ -59,16 +59,26 @@
         </div>
 
         <div id="securityWarning" style="display: none; background: #ff6b6b22; border: 1px solid #ff6b6b; border-radius: 4px; padding: 8px; margin-bottom: 15px; color: #ff6b6b; font-size: 13px;">
-            ⚠️ XSS bypass is enabled - potentially dangerous content allowed in messages
-        </div>
-
-        <!-- Collapsible: Web Interface -->
-        <div class="accordion" id="webInterfaceAccordion">
-            <div class="accordion-header" data-target="#webInterfaceContent" style="display:flex; align-items:center; justify-content: space-between; cursor: pointer;">
-                <h3>🌐 Web Interface</h3>
+            <!-- ⚠️ XSS bypass is enabled - potentially dangerous content allowed in messages -->
+             </div> 
+        <!-- Unified Accordion: Web Interface + Advanced -->
+        <div class="accordion" id="controlsAccordion">
+            <div class="accordion-header" data-target="#controlsContent" style="display:flex; align-items:center; justify-content: space-between; cursor: pointer;">
+                <div>
+                    <h3>🧩 Controls</h3>
+                    <small style="opacity:0.7;">Web interface, settings, debug tools and terminal</small>
+                </div>
                 <span>Show/Hide</span>
             </div>
-            <div class="accordion-content" id="webInterfaceContent" style="display: none;">
+            <div class="accordion-content" id="controlsContent" style="display: none;">
+                <!-- Toolbar with Settings -->
+                <div style="display:flex; justify-content:flex-end; margin-bottom:8px; gap:8px;">
+                    <button id="settingsBtn" onclick="openSettings()" class="btn-secondary" title="Open Settings">
+                        <span class="btn-icon">⚙️</span>Settings
+                    </button>
+                </div>
+
+                <!-- Web Interface Section -->
                 <div class="web-interface-section">
                     <div class="section-header">
                         <h3>🌐 Web Interface</h3>
@@ -110,24 +120,8 @@
                         </button>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Accordion: Advanced (Settings + Debug Controls + Terminal Output) -->
-        <div class="accordion" id="advancedAccordion">
-            <div class="accordion-header" data-target="#advancedContent" style="display:flex; align-items:center; justify-content: space-between; cursor: pointer;">
-                <div>
-                    <h3>Advanced</h3>
-                    <small style="opacity:0.7;">Development tools and terminal output</small>
-                </div>
-                <div style="display:flex; gap:8px; align-items:center;">
-                    <button id="settingsBtn" onclick="openSettings()" class="btn-secondary" title="Open Settings">
-                        <span class="btn-icon">⚙️</span>Settings
-                    </button>
-                    <span>Show/Hide</span>
-                </div>
-            </div>
-            <div class="accordion-content" id="advancedContent" style="display: none;">
+                <!-- Advanced Section (Debug + Terminal) -->
                 <div class="debug-section" id="debugSection" style="display: none;">
                     <div class="debug-header">
                         <h3>🧪 Development Debug Controls</h3>
