@@ -15,6 +15,7 @@ let sessionState = {
 let historyData = [];
 let draggedIndex = -1;
 let allowDangerousXssbypass = false;
+let hideClaudeFooter = false;
 
 // Terminal output state
 let debugTerminalContent = '';
@@ -93,6 +94,7 @@ export {
   historyData,
   draggedIndex,
   allowDangerousXssbypass,
+  hideClaudeFooter,
   debugTerminalContent,
   claudeContent,
   lastRenderedContent,
@@ -137,6 +139,14 @@ export function updateWebServerStatus(status) {
 
 export function setAllowDangerousXssbypass(value) {
   allowDangerousXssbypass = value;
+}
+
+export function setHideClaudeFooter(value) {
+  hideClaudeFooter = Boolean(value);
+}
+
+export function getHideClaudeFooter() {
+  return hideClaudeFooter;
 }
 
 export function setIsDevelopmentMode(value) {

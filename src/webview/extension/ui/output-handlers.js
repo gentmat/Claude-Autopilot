@@ -1,5 +1,5 @@
 // Terminal and Claude output processing and rendering
-import { 
+import {
   CLAUDE_RENDER_THROTTLE_MS,
   getClaudeRenderThrottleMs,
   setDebugTerminalContent,
@@ -22,7 +22,8 @@ import {
   getLastParsedContent,
   getLastParsedHtml,
   setLastContentHash,
-  getLastContentHash
+  getLastContentHash,
+  getHideClaudeFooter
 } from '../core/state.js';
 import { createSafeElement } from '../security/validation.js';
 import { parseAnsiToHtml } from '../utils/ansi-parser.js';
@@ -70,6 +71,22 @@ export function appendToTerminal(output) {
     terminalOutput.scrollTop = terminalOutput.scrollHeight;
   } catch (error) {
     console.error('Error appending to terminal:', error);
+  }
+}
+
+export function refreshClaudeOutputRender() {
+  try {
+    const lastOutput = getLastRenderedContent();
+    if (!lastOutput) {
+      return;
+    }
+
+    setLastContentHash('');
+    setLastParsedContent('');
+    setLastParsedHtml('');
+    performClaudeRender(lastOutput);
+  } catch (error) {
+    console.error('Error refreshing Claude render:', error);
   }
 }
 
@@ -170,8 +187,9 @@ export function performClaudeRender(output) {
             
       // Parse and render the new content (remove clear screen codes after detection)
       const contentToRender = getClaudeContent().replace(/\x1b\[[2-3]J/g, '').replace(/\x1b\[H/g, '');
-      const htmlOutput = parseAnsiToHtml(contentToRender);
-      setLastParsedContent(output);
+      const renderedContent = applySessionFooterPreference(contentToRender);
+      const htmlOutput = parseAnsiToHtml(renderedContent);
+      setLastParsedContent(contentToRender);
       setLastParsedHtml(htmlOutput);
             
       const outputElement = document.createElement('div');
@@ -181,7 +199,7 @@ export function performClaudeRender(output) {
     } else {
       // No clear screen - this is the complete current screen content from backend
       // Create content hash for more efficient change detection
-      const contentHash = output.length + '_' + (output.slice(0, 100) + output.slice(-100));
+      const contentHash = output.length + '_' + (output.slice(0, 100) + output.slice(-100)) + '_' + (getHideClaudeFooter() ? 'hide' : 'show');
       
       // Only update if content has actually changed (using hash for efficiency)
       if (contentHash !== getLastContentHash()) {
@@ -190,15 +208,18 @@ export function performClaudeRender(output) {
                 
         // Use cached parsing if content hasn't changed significantly
         let htmlOutput;
-        if (output === getLastParsedContent() && getLastParsedHtml()) {
+        const currentContent = getClaudeContent();
+        if (currentContent === getLastParsedContent() && getLastParsedHtml()) {
+          const renderContent = applySessionFooterPreference(currentContent);
           htmlOutput = getLastParsedHtml();
           if (isDevelopmentMode) {
             console.log('📋 Using cached ANSI parsing result');
           }
         } else {
           // Parse and cache the result
-          htmlOutput = parseAnsiToHtml(getClaudeContent());
-          setLastParsedContent(output);
+          const renderContent = applySessionFooterPreference(currentContent);
+          htmlOutput = parseAnsiToHtml(renderContent);
+          setLastParsedContent(currentContent);
           setLastParsedHtml(htmlOutput);
           if (isDevelopmentMode) {
             console.log('🔄 Parsing ANSI content');
@@ -245,6 +266,46 @@ export function performClaudeRender(output) {
   } catch (error) {
     console.error('Error performing Claude render:', error);
   }
+}
+
+function applySessionFooterPreference(content) {
+  if (!getHideClaudeFooter()) {
+    return content;
+  }
+
+  // Strip ANSI codes to find the separator in plain text
+  const plainContent = content.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '');
+  
+  // Look for separator line (multiple dashes) followed by prompt line (> with optional space/nbsp)
+  const separatorMatch = plainContent.match(/\r?\n─{10,}\r?\n>\s*/);
+  if (!separatorMatch) {
+    return content;
+  }
+
+  // Find the position in the original content by counting characters up to the separator
+  const plainIndex = plainContent.indexOf(separatorMatch[0]);
+  if (plainIndex === -1) {
+    return content;
+  }
+
+  // Map plain text index back to original content with ANSI codes
+  let originalIndex = 0;
+  let plainCharCount = 0;
+  
+  while (plainCharCount < plainIndex && originalIndex < content.length) {
+    // Check if we're at an ANSI escape sequence
+    const ansiMatch = content.slice(originalIndex).match(/^\x1b\[[0-9;?]*[ -/]*[@-~]/);
+    if (ansiMatch) {
+      // Skip the ANSI sequence without counting it
+      originalIndex += ansiMatch[0].length;
+    } else {
+      // Regular character, count it
+      originalIndex++;
+      plainCharCount++;
+    }
+  }
+
+  return content.slice(0, originalIndex);
 }
 
 export function clearClaudeOutput() {

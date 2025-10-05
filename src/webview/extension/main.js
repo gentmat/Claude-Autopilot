@@ -15,7 +15,8 @@ import {
   fileAutocompleteState 
 } from './features/file-autocomplete.js';
 import { sendClaudeKeypress } from './communication/vscode-api.js';
-import { flushPendingClaudeOutput } from './ui/output-handlers.js';
+import { flushPendingClaudeOutput, refreshClaudeOutputRender } from './ui/output-handlers.js';
+import { setHideClaudeFooter, getHideClaudeFooter } from './core/state.js';
 
 // Initialize the application
 function initialize() {
@@ -76,6 +77,14 @@ function doInitialize() {
       console.log('✅ DEBUG: Accordions setup complete');
     } catch (error) {
       console.error('❌ DEBUG: Failed to setup accordions:', error);
+    }
+
+    // Set up Claude footer visibility toggle
+    try {
+      setupHideClaudeFooterToggle();
+      console.log('✅ DEBUG: Claude footer toggle setup complete');
+    } catch (error) {
+      console.error('❌ DEBUG: Failed to setup Claude footer toggle:', error);
     }
 
     // Initialize button states and load history
@@ -209,6 +218,22 @@ function setupAccordions() {
   });
 
   console.log('✅ DEBUG: Accordions setup complete');
+}
+
+function setupHideClaudeFooterToggle() {
+  const toggle = document.getElementById('hideClaudeFooterToggle');
+
+  if (!toggle) {
+    console.warn('⚠️ DEBUG: hideClaudeFooterToggle element not found');
+    return;
+  }
+
+  toggle.checked = getHideClaudeFooter();
+
+  toggle.addEventListener('change', function(event) {
+    setHideClaudeFooter(event.target.checked);
+    refreshClaudeOutputRender();
+  });
 }
 
 function setupKeyboardHandlers() {

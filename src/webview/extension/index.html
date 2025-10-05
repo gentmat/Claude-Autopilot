@@ -16,7 +16,13 @@
         <div class="claude-output-section">
             <div class="claude-header">
                 <h3 class="claude-title">🤖 Claude Live Output</h3>
-                <button onclick="clearClaudeOutput()" class="clear-button">Clear</button>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <label for="hideClaudeFooterToggle" style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+                        <input type="checkbox" id="hideClaudeFooterToggle" style="margin: 0;" />
+                        <span style="opacity: 0.8;">Hide session footer</span>
+                    </label>
+                    <button onclick="clearClaudeOutput()" class="clear-button">Clear</button>
+                </div>
             </div>
             <div id="claudeOutputContainer">
                 <div class="claude-live-output" tabindex="0">
